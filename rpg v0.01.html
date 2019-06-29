@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Indie RPG Project</title>
+    <style>
+    	* { padding: 0; margin: 0; }
+    	canvas { background: #eee; display: block; margin: 0 auto; }
+    </style>
+</head>
+<body>
+
+<canvas id="myCanvas" width="1920" height="1080"></canvas>
+
+<script src="https://www.moneybutton.com/moneybutton.js"></script>
+<div id='my-money-button'></div>
+<script>
+</script>
+
+<script>
+	/*class Tile {
+	  constructor(id, level) {
+	    this.x = x;
+      this.y = y;
+      this.owned = false;
+	  }
+	}*/
+
+	class Unit {
+	  constructor(x, y, color) {
+	    this.x = x;
+      this.y = y;
+      this.color = color;
+	  }
+	}
+
+  /*let { MoneyButtonClient } = require('@moneybutton/api-client');
+  let moneyButtonClient = new MoneyButtonClient(b3536e2a2b10f7fbf0177c9660aa5d35);
+  moneyButtonClient.requestAuthorization('auth.user_identity:read', OAUTH_REDIRECT_URI);
+  await moneyButtonClient.handleAuthorizationResponse();
+  const { id: moneyButtonId } = await moneyButtonClient.getIdentity();*/
+
+	let canvas = document.getElementById("myCanvas");
+	let ctx = canvas.getContext("2d");
+	let biomeDraws = ['#055000', 'white'];
+  let biomeNames = ["Grassland", "Snowy Region"];
+  let tileDraws = ['black', 'black', 'blue', '#808000', "rgba(69,69,69,1)"];
+  let tileNames = ["Zero", "Fill", "Water", "Tree", "House"];
+
+
+  let tileIndex = false; // render tile layer index for testing
+  let infoMenu = false;
+  let homeMenu = false;
+  let unitMenu = false;
+
+	let mapWidth = 999;
+	let mapHeight = 999;
+  let cameraX = 500 - 30;
+  let cameraY = 500 - 17;
+  let cursorX = 0;
+  let cursorY = 0;
+  let cursorMapX = 0;
+  let cursorMapY = 0;
+  let playerX = 500;
+  let playerY = 500;
+  let playerIncome = 0;
+  let playerIncomeS = 0;
+  let playerGold = 100;
+  let playerSilver = 20;
+  let tileSelectX = 0;
+  let tileSelectY = 0;
+  let rightPressed = false;
+  let leftPressed = false;
+  let upPressed = false;
+  let downPressed = false;
+  let clickStart = 0;
+  let clickEnd = 0;
+
+	let map = [];
+	let tiles = [];
+  let tilesOwned = []; // Dictionary was perfect, would like n(1) again
+  //let objects = [];
+  let units = [new Unit(9, 9, "blue"), new Unit(11, 11, "blue")]; // Dictionary was perfect, would like n(1) again
+	let ID = [];
+  let movement = [[0, 1, 0, -1, 0], [0, 0, 1, 0, -1]];
+  let movementFull = [[0, 1, 1, 0, -1, -1, -1, 0, 1], [0, 0, 1, 1, 1, 0, -1, -1, -1]];
+
+  const div = document.getElementById('my-money-button');
+
+  /*moneyButton.render(div, {
+    to: "12cRRk9wn2LofWKE2wwxb7mw5qNeMaW7zH",
+    amount: ".1",
+    currency: "USD",
+    label: "Hi",
+    clientIdentifier: "RPG",
+    buttonId: "IndieRPGProject",
+    buttonData: "{}",
+    type: "tip",
+    onPayment: function (arg) { console.log('onPayment', arg) },
+    onError: function (arg) { console.log('onError', arg) }
+  })
+
+  function upload(payment)
+  {
+
+  }*/
+
+	function rnd(max, min = 0) {
+		return min + Math.floor(Math.random() * max); }
+
+	function rndCeil(max, min = 0) {
+		return min + Math.ceil(Math.random() * max); }
+
+  function loop(num, min, max) {
+    range = max - min;
+    if (num > max) {
+      num -= range + 1; }
+    else if (num < min) {
+      num += range + 1; }
+    if (num > max || num < min) {
+      loop(num, min, max); }
+    return num; }
+
+  function range(num, min, max) {
+    if (num > max) {
+      num = max; }
+    if (num < min) {
+      num = min; }
+    return num; }
+
+  function contains(x, y, width, height, checkX, checkY) {
+      if (x <= checkX && checkX <= x + width && y <= checkY && checkY <= y + height)
+      {
+        return true;
+      }
+      return false;
+  }
+
+  function checkAdj(val, x, y, array = map) // returns seed percentage
+  {
+    let seed = 0;
+    for (let i = 1; i <= 4; i++)
+    {
+      if (array[range(x + movement[0][i], 0, 999)][range(y + movement[1][i], 0, 999)] == val)
+      {
+        seed += .25;
+      }
+    }
+    return seed;
+  }
+
+  function traceProperty(x, y)
+  {
+    do {
+      y = y + movement[1][4];
+    } while (tilesOwned[x][y]);
+
+    let xi = x;
+    let yi = y;
+    let direction = (tilesOwned[xi + 1][yi]) ? 4 : 1;
+    drawText("+1", (xi - cameraX) * 32 + 4, (yi - cameraY + 1) * 32 - 8, "24px Arial", "gold");
+    if (clickEnd != 0 && contains((xi - cameraX) * 32, (yi - cameraY) * 32, 32, 32, cursorX, cursorY))
+    {
+      tilesOwned[xi][yi] = true;
+      homeMenu = false;
+      return;
+    }
+
+    xi = xi + movement[0][direction];
+    yi = yi + movement[1][direction];
+
+    do {
+      drawText("+1", (xi - cameraX) * 32 + 4, (yi - cameraY + 1) * 32 - 8, "24px Arial", "gold");
+      if (clickEnd != 0 && contains((xi - cameraX) * 32, (yi - cameraY) * 32, 32, 32, cursorX, cursorY))
+      {
+        tilesOwned[xi][yi] = true;
+        homeMenu = false;
+        return;
+      }
+
+      direction = loop(direction + 1, 1, 4);
+
+      if (tilesOwned[xi + movement[0][direction]][yi + movement[1][direction]]) {
+        do {
+          direction = loop(direction - 1, 1, 4);
+        } while (tilesOwned[xi + movement[0][direction]][yi + movement[1][direction]]);
+      }
+
+      xi = xi + movement[0][direction];
+      yi = yi + movement[1][direction];
+
+      if (xi == x && yi == y) { return; }
+    } while (true);
+  }
+
+	async function generateMap() {
+		for (let y = 0; y <= mapHeight; y++)
+		{
+			for (let x = 0; x <= mapWidth; x++)
+			{
+        if (y == 0)
+        {
+          map[x] = [];
+          tiles[x] = [];
+          tilesOwned[x] = [];
+          //objects[x] = [];
+        }
+				map[x][y] = 0;
+				tiles[x][y] = 0;
+				tilesOwned[x][y] = false;
+			}
+		}
+    generateSnow();
+    expandSnow();
+    generateWater();
+    expandWater();
+    generateTrees();
+    expandTrees();
+	}
+
+  function layer(val, x, y, min, max, array = map) {
+    for (let i = min; i <= max; i++) {
+      x--;
+      y--;
+      array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val;
+      for (let ii = 1; ii <= 8; ii++) {
+        for (let iii = 0; iii < i; iii++) {
+          x += movementFull[0][ii];
+          y += movementFull[1][ii];
+          array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val; }}}}
+
+  function layerSq(val, x, y, min, max, array = map) {
+    for (let i = min; i <= max; i++) {
+      x--;
+      y--;
+      array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val;
+      for (let ii = 1; ii <= 4; ii++) {
+        for (let iii = 0; iii < i * 2; iii++) {
+          x += movement[0][ii];
+          y += movement[1][ii];
+          array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val; }}}}
+
+  function pool(val, x, y, array) {
+    let i = 0;
+    let slope = 0;
+    do {
+      layer(val, x, y, i, i + 1, array);
+      slope = rnd(9);
+      i++; }
+    while (slope == 0);
+    return (slope); }
+
+	function generateSnow() {
+    let size;
+    let move = 1;
+    let x;
+    let y;
+    for (let i = 0; i < 250; i++) {
+      size = rnd(6) + 3;
+      x = rnd(mapWidth + 1);
+      y = rnd(mapHeight + 1);
+      map[x][y] = 1;
+      layer(1, x, y, 1, size, map); }}
+
+	function generateWater() {
+    let slope;
+    let current;
+    let flow;
+    let x;
+    let y;
+    for (let i = 0; i < 1000; i++) {
+      slope = rnd(9); // 0 causes a pool, forces new flow, !chance new river
+      flow = 3 * (rndCeil(30));
+      x = rnd(mapWidth + 1);
+      y = rnd(mapHeight + 1);
+      tiles[x][y] = 2;
+      if (slope == 0) {
+        slope = pool(2, x, y, tiles);
+      }
+      do {
+        x = range((x + movementFull[0][slope]), 0, 999);
+        y = range((y + movementFull[1][slope]), 0, 999);
+        tiles[x][y] = 2;
+        if (rnd(5) < 1)
+        {
+          slope = rnd(9);
+          if (slope == 0)
+          {
+            slope = pool(2, x, y, tiles);
+          }
+        }
+        flow--;
+      }
+      while (flow > 0);
+     }}
+
+	function generateTrees() {
+     let x;
+     let y;
+     for (let i = 0; i < 200000; i++) {
+       x = rnd(999);
+       y = rnd(999)
+       if (tiles[x][y] == 0) {
+         tiles[x][y] = 3; }}}
+
+  function generateLand() {
+    tilesOwned[playerX][playerY] = true;
+    layerSq(true, playerX, playerY, 1, 3, tilesOwned); }
+
+  function expansion(val, def, gen, array = map) {
+    for (let i = 0; i < def; i++) {
+      for (let y = 0; y <= mapHeight; y++) {
+        for (let x = 0; x <= mapWidth; x++) {
+          if (array[x][y] != val) {
+            let seed = checkAdj(val, x, y, array);
+            if (rnd(100 * seed) > gen) {
+              array[x][y] = val; }}}}}}
+
+  function expandSnow() {
+    expansion(1, 5, 15);
+    expansion(1, 5, 30);
+    expansion(1, 1, 75); }
+
+  function expandWater() {
+    expansion(2, 2, 20, tiles);
+    expansion(2, 5, 40, tiles);
+    expansion(2, 2, 80, tiles); }
+
+  function expandTrees() {
+    expansion(3, 1, 35, tiles);
+    expansion(3, 1, 60, tiles);
+    expansion(3, 1, 85, tiles); }
+
+  function logic() {
+    if (rightPressed) {
+      cameraX = range(++cameraX, 0, mapWidth - 59); }
+    if (downPressed) {
+      cameraY = range(++cameraY, 0, mapHeight - 33); }
+    if (leftPressed) {
+      cameraX = range(--cameraX, 0, mapWidth - 59); }
+    if (upPressed) {
+      cameraY = range(--cameraY, 0, mapHeight - 33); }}
+
+	function drawMap() {
+		let size = 32;
+		for (let y = 0; y < 34; y++) {
+			for (let x = 0; x < 60; x++) {
+        let land = map[x + cameraX][y + cameraY];
+        let tile = tiles[x + cameraX][y + cameraY];
+        let outlineColor;
+        if (tilesOwned[x + cameraX][y + cameraY] == true)
+        {
+          outlineColor = "rgba(0,0,255,0.35)";
+        }
+        else
+        {
+          outlineColor = "rgba(0,0,0,0.05)";
+        }
+				ctx.beginPath();
+				ctx.rect(x * 32, y * 32, size, size);
+				ctx.fillStyle = biomeDraws[land];
+				ctx.strokeStyle = outlineColor;
+				ctx.lineWidth = "1";
+				ctx.fill();
+				ctx.stroke();
+
+        ctx.beginPath();
+        if (tileSelectX != 0 && tileSelectY != 0)
+        {
+          ctx.rect((tileSelectX - cameraX) * 32, (tileSelectY - cameraY) * 32, 32, 32);
+        }
+        else {
+          ctx.rect(cursorMapX * 32, cursorMapY * 32, 32, 32);
+        }
+        ctx.strokeStyle = "rgba(255,255,255,1)";
+        ctx.lineWidth = "3";
+        ctx.stroke();
+
+        if (tile != 0)
+        {
+          if (tile == 3)
+          {
+            ctx.beginPath();
+            ctx.moveTo(x * 32 + 16, y * 32 + 8);
+            ctx.lineTo(x * 32 + 28, y * 32 + 28);
+            ctx.lineTo(x * 32 + 4, y * 32 + 28);
+    				ctx.fillStyle = "#6E2C00";
+            //ctx.lineTo(x * 32 + 16, y * 32 + 8);
+            ctx.fill();
+          }
+          else if (tile == 4)
+          {
+            drawHouse(x * 32, y * 32, 1, "rgba(69,69,69,0.7)");
+          }
+          else {
+    				ctx.beginPath();
+    				ctx.rect(x * 32, y * 32, size, size);
+    				ctx.fillStyle = tileDraws[tile];
+    				//ctx.strokeStyle = "rgba(0,0,0,0.05)";
+    				//ctx.lineWidth = "1";
+    				ctx.fill();
+    				//ctx.stroke();
+          }
+        }
+       }}
+
+
+  if (homeMenu) {
+    traceProperty(playerX, playerY); }
+
+  if (tileIndex) {
+  	for (let y = 0; y < 34; y++) {
+  		for (let x = 0; x < 60; x++) {
+  			ctx.font = "30px Arial";
+  			ctx.fillStyle = "black";
+  			ctx.fillText(tiles[x + cameraX][y + cameraY], 8 + x * 32, 28 + y * 32); }}}
+}
+
+  function drawMod()
+  {
+
+  }
+
+  function drawText(text, x, y, font, color)
+  {
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+  }
+
+  function drawHouse(x, y, scale, color)
+  {
+    ctx.beginPath();
+    ctx.moveTo(x + 16 * scale, y + 4 * scale);
+    ctx.lineTo(x + 28 * scale, y + 16 * scale);
+    ctx.lineTo(x + 4 * scale, y + 16 * scale);
+    ctx.moveTo(x + 7 * scale, y + 16 * scale);
+    ctx.lineTo(x + 7 * scale, y + 28 * scale);
+    ctx.lineTo(x + 25 * scale, y + 28 * scale);
+    ctx.lineTo(x + 25 * scale, y + 16 * scale);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  function drawUnit(x, y, scale, color)
+  {
+    ctx.beginPath();
+    ctx.fillStyle = color;
+    ctx.arc(x + (16 * scale), y + (10 * scale), 6 * scale, 0, Math.PI * 2, true);
+    ctx.moveTo(x + 16 * scale, y + 16 * scale);
+    ctx.lineTo(x + 24 * scale, y + 28 * scale);
+    ctx.lineTo(x + 8 * scale, y + 28 * scale);
+    ctx.fill();
+  }
+
+  function drawObj()
+  {
+    ctx.beginPath();
+    ctx.rect((playerX - cameraX) * 32 + 4, (playerY - cameraY) * 32 + 4, 24, 24);
+    ctx.fillStyle = "rgba(169,169,169,0.35)";
+    ctx.strokeStyle = "rgba(0,0,0,0.5)";
+    ctx.lineWidth = "3";
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.fillStyle = "rgba(0,0,0,0.8)";
+    ctx.rect((playerX - cameraX) * 32 + 10, (playerY - cameraY) * 32 + 10, 12, 12)
+    ctx.fill();
+
+    for (let i = 0; i < units.length - 1; i++)
+    {
+      drawUnit((units[i].x - cameraX) * 32, (units[i].y - cameraY) * 32, 1, units[i].color);
+    }
+  }
+
+  function drawUI()
+  {
+    let rectangle;
+    let x;
+    let y;
+
+    ctx.font = "30px Arial";
+    ctx.fillStyle = "black";
+    ctx.fillText(cursorMapX, 8, 28);
+    ctx.font = "30px Arial";
+    ctx.fillStyle = "black";
+    ctx.fillText(cursorMapY, 8 + 32, 28);
+    ctx.font = "30px Arial";
+    ctx.fillStyle = "gold";
+    ctx.fillText(playerGold, 8 + 128, 28);
+    ctx.font = "30px Arial";
+    ctx.fillStyle = "silver";
+    ctx.fillText(playerSilver, 8 + 192, 28);
+
+    rect = [32, 64, 64, 64];
+    ctx.beginPath();
+    ctx.rect(rect[0], rect[1], rect[2], rect[3]);
+    ctx.fillStyle = "rgba(0,0,0,0.05)";
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = "3";
+    ctx.fill();
+    ctx.stroke();
+    ctx.font = "60px Arial";
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillText("i", 57, 118);
+    if (contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
+      {
+        ctx.beginPath();
+        ctx.rect(rect[0], rect[1], rect[2], rect[3]);
+        ctx.strokeStyle = "rgba(255,255,255,1)";
+        ctx.lineWidth = "5";
+        ctx.stroke();
+        if (clickEnd != 0) {
+          if (!tileIndex) {
+            tileIndex = true; }
+          else {
+            tileIndex = false; }
+        }
+      }
+
+    rect = [32, 160, 64, 64];
+    ctx.beginPath();
+    ctx.rect(rect[0], rect[1], rect[2], rect[3]);
+    ctx.fillStyle = "rgba(0,0,0,0.05)";
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = "3";
+    ctx.fill();
+    ctx.stroke();
+    drawHouse(rect[0], rect[1], 2, "rgba(69,69,69,0.7)");
+    if (contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
+      {
+        ctx.beginPath();
+        ctx.rect(rect[0], rect[1], rect[2], rect[3]);
+        ctx.strokeStyle = "rgba(255,255,255,1)";
+        ctx.lineWidth = "5";
+        ctx.stroke();
+
+        if (clickEnd != 0) {
+          if (tileSelectX != 0 && tilesOwned[tileSelectX][tileSelectY] && tiles[tileSelectX][tileSelectY] != 4) {
+            tiles[tileSelectX][tileSelectY] = 4;
+            playerIncome++; }
+
+          if (!tileIndex) {
+            homeMenu = true; }
+        }
+      }
+
+      rect = [32, 256, 64, 64];
+      ctx.beginPath();
+      ctx.rect(rect[0], rect[1], rect[2], rect[3]);
+      ctx.fillStyle = "rgba(0,0,0,0.05)";
+      ctx.strokeStyle = "rgba(0,0,0,0.25)";
+      ctx.lineWidth = "3";
+      ctx.fill();
+      ctx.stroke();
+      drawUnit(rect[0], rect[1], 2, "rgba(0,0,200,.5)")
+      if (contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
+        {
+          ctx.beginPath();
+          ctx.rect(rect[0], rect[1], rect[2], rect[3]);
+          ctx.strokeStyle = "rgba(255,255,255,1)";
+          ctx.lineWidth = "5";
+          ctx.stroke();
+          if (clickEnd != 0) {
+            units.push(new Unit(rnd(60), rnd(34), "blue"));
+            if (!tileIndex) {
+              unitMenu = true; }
+            else {
+              unitMenu = false; }
+          }
+        }
+
+    ctx.beginPath();
+    ctx.rect(1568, 32, 320, 224);
+    ctx.fillStyle = "rgba(0,0,0,0.05)";
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = "3";
+    ctx.fill();
+    ctx.stroke();
+    if (tileSelectX != 0 && tileSelectY != 0)
+    {
+      x = tileSelectX;
+      y = tileSelectY;
+    }
+    else {
+      x = cameraX + cursorMapX;
+      y = cameraY + cursorMapY;
+    }
+    ctx.font = "40px Arial";
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillText(biomeNames[map[x][y]], 1600, 100);
+    ctx.font = "40px Arial";
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillText(tileNames[tiles[x][y]], 1600, 150);
+    ctx.font = "40px Arial";
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillText(tilesOwned[x][y], 1600, 200);
+
+    clickEnd = 0;
+  }
+
+	function draw() {
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		drawMap();
+    drawMod();
+    drawObj();
+    drawUI(); }
+
+	generateMap();
+  generateLand();
+
+  document.addEventListener("keydown", keyDownHandler, false);
+  document.addEventListener("keyup", keyUpHandler, false);
+  document.addEventListener("mousedown", mouseDownHandler, false);
+  document.addEventListener("mouseup", mouseUpHandler, false);
+
+  function mouseDownHandler(e) {
+    clickStart = Date.now();
+    if (infoMenu) {
+      infoMenu = false; }
+    //if (homeMenu) {
+      //homeMenu = false; }
+    if (unitMenu) {
+      unitMenu = false; }
+
+  }
+
+  function mouseUpHandler(e) {
+    clickEnd = Date.now() - clickStart;
+    clickStart = 0;
+
+    if (cameraX + cursorMapX == tileSelectX && cameraY + cursorMapY == tileSelectY)
+    {
+      tileSelectX = 0;
+      tileSelectY = 0;
+    }
+    else if (cursorX > 96) {
+      tileSelectX = cameraX + cursorMapX;
+      tileSelectY = cameraY + cursorMapY;
+    }
+  }
+
+  function keyDownHandler(e) {
+      if(e.key == "d") {
+          rightPressed = true; }
+      else if(e.key == "s") {
+          downPressed = true; }
+      else if(e.key == "a") {
+          leftPressed = true; }
+      else if(e.key == "w") {
+          upPressed = true; }}
+
+  function keyUpHandler(e) {
+      if(e.key == "d") {
+          rightPressed = false; }
+      else if(e.key == "s") {
+          downPressed = false; }
+      else if(e.key == "a") {
+          leftPressed = false; }
+      else if(e.key == "w") {
+          upPressed = false; }}
+
+  window.onload = init;
+  function init() {
+    if (window.Event) {
+    document.captureEvents(Event.MOUSEMOVE);
+    }
+    document.onmousemove = getCursorXY;
+  }
+
+  function getCursorXY(e) {
+    let rect = canvas.getBoundingClientRect();
+    cursorX = (event.clientX - rect.left) / (rect.right - rect.left) * canvas.width;
+    cursorY = (event.clientY - rect.top) / (rect.bottom - rect.top) * canvas.height;
+    cursorMapX = Math.floor(cursorX / 32);
+    cursorMapY = Math.floor(cursorY / 32);
+  }
+
+	setInterval(logic, 20);
+	setInterval(draw, 20);
+</script>
+
+</body>
+</html>

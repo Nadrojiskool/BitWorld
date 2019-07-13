@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8" />
+    <script type="text/javascript" src="https://unpkg.com/bsv@0.27.1/bsv.min.js"></script>
     <title>Indie RPG Project</title>
     <style>
     	* { padding: 0; margin: 0; }
@@ -13,6 +14,8 @@
 <canvas id="myCanvas" width="1920" height="1080"></canvas>
 
 <script src="https://www.moneybutton.com/moneybutton.js"></script>
+<script src='https://unpkg.com/datapay'></script>
+<script src='https://unpkg.com/databutton'></script>
 <div id='my-money-button'></div>
 <script>
 </script>
@@ -26,10 +29,26 @@
 	  }
 	}*/
 
+  class Tuple {
+    constructor(x, y, z) {
+      this.x = x;
+      this.y = y;
+      this.z = z;
+    }
+  }
+
+  class Tile {
+
+  }
+
+  class Building {
+
+  }
+
 	class Unit {
 	  constructor(x, y, color) {
-	    this.x = x;
-      this.y = y;
+	    //this.x = x;
+      //this.y = y;
       this.color = color;
 	  }
 	}
@@ -45,24 +64,24 @@
 	let biomeDraws = ['#055000', 'white'];
   let biomeNames = ["Grassland", "Snowy Region"];
   let tileDraws = ['black', 'black', 'blue', '#808000', "rgba(69,69,69,1)"];
-  let tileNames = ["Zero", "Fill", "Water", "Tree", "House"];
+  let tileNames = ["Zero", "Fill", "Water", "Forest", "House"];
 
 
   let tileIndex = false; // render tile layer index for testing
   let infoMenu = false;
-  let homeMenu = false;
-  let unitMenu = false;
+  let buyLand = false;
+  let paintLand = false;
 
 	let mapWidth = 999;
 	let mapHeight = 999;
-  let cameraX = 500 - 30;
-  let cameraY = 500 - 17;
+  let cameraX = 50 - 30;
+  let cameraY = 50 - 17;
   let cursorX = 0;
   let cursorY = 0;
   let cursorMapX = 0;
   let cursorMapY = 0;
-  let playerX = 500;
-  let playerY = 500;
+  let playerX = 50;
+  let playerY = 50;
   let playerIncome = 0;
   let playerIncomeS = 0;
   let playerGold = 100;
@@ -75,19 +94,83 @@
   let downPressed = false;
   let clickStart = 0;
   let clickEnd = 0;
+  let clickLock = false;
+  let tileAdded = false;
+  let buildHouse = false;
+  let uploading = false;
 
 	let map = [];
 	let tiles = [];
-  let tilesOwned = []; // Dictionary was perfect, would like n(1) again
+  let tileOwned = [];
+  let tileAction = [];
+  let tileCompleted = [];
+  let tileLevel = [];
+  let activeMenu = 0;
+  let menuText = [
+    [],
+    ["Btn", "Draw Tile Index"],
+    ["Btn", "Build House (25:1)", "Buy Land", "Level Up (10X:1)", ""],
+    ["Btn", "Spawn Unit"],
+    ["Btn"]];
+  let menuLogic = [[],[],[],[],[]];
+  menuLogic[0][0] = () => {};
+
+  menuLogic[1][0] = () => {}; // info menu main button function
+  menuLogic[1][1] = () => {
+    tileIndex = !tileIndex; };
+
+  menuLogic[2][0] = () => {}; // home menu main button function
+  menuLogic[2][1] = () => {
+    buildHouse = !buildHouse; };
+  menuLogic[2][2] = () => {
+    buyLand = !buyLand; };
+  menuLogic[2][3] = () => {
+    if (playerGold >= 10 * tileLevel[tileSelectX][tileSelectY]) {
+      playerGold -= 10 * tileLevel[tileSelectX][tileSelectY];
+      tileLevel[tileSelectX][tileSelectY]++; }};
+  menuLogic[2].push(menuLogic[0][0]);
+  menuLogic[2].push(menuLogic[0][0]);
+
+  menuLogic[3][0] = () => {}; // unit menu main button function
+  menuLogic[3][1] = () => {
+    units.set(new Tuple(rnd(60) + cameraX, rnd(34) + cameraY, 0), "blue"); };
+    
+  menuLogic[4][0] = () => {
+    playerGold += 100;
+  }; // lovely button function
+
   //let objects = [];
-  let units = [new Unit(9, 9, "blue"), new Unit(11, 11, "blue")]; // Dictionary was perfect, would like n(1) again
+  let units = new Map();
+  units.set(new Tuple(40, 40, 0), "blue");
+  let buildings = new Map();
+  units.set(new Tuple(playerX, playerY, 0), "blue");
 	let ID = [];
   let movement = [[0, 1, 0, -1, 0], [0, 0, 1, 0, -1]];
   let movementFull = [[0, 1, 1, 0, -1, -1, -1, 0, 1], [0, 0, 1, 1, 1, 0, -1, -1, -1]];
 
   const div = document.getElementById('my-money-button');
+  //let bsv = require('bsv')
 
-  /*moneyButton.render(div, {
+  /*
+  var query = {
+    v: 3,
+    q: { find: {}, limit: 5 }
+  };
+  var b64 = btoa(JSON.stringify(query));
+  var url = "https://genesis.bitdb.network/q/1FnauZ9aUH2Bex6JzdcV4eNX7oLSSEbxtN/" + b64;
+
+  var header = {
+    headers: { key: "1CRKrBCUJDFyU3LsBAQRzwBkBPrjmDQasV" }
+  };
+
+  fetch(url, header).then(function(r) {
+    return r.json()
+  }).then(function(r) {
+    var result = JSON.stringify(r, null, 2);
+    document.querySelector("pre").innerHTML = result;
+  })
+
+  /*moneyButton.render(div, { // 
     to: "12cRRk9wn2LofWKE2wwxb7mw5qNeMaW7zH",
     amount: ".1",
     currency: "USD",
@@ -100,9 +183,21 @@
     onError: function (arg) { console.log('onError', arg) }
   })
 
-  function upload(payment)
+  function upload(data)
   {
+    /*moneyButton.render(div, {
+      outputs: [{
+        type: 'SCRIPT',
+        script: data,
+        amount: '.002',
+        currency: 'USD'
+      }]
+    })
+  }
 
+  function uploadData(data)
+  {
+    //upload(bsv.Script.buildDataOut(arrMny).toASM());
   }*/
 
 	function rnd(max, min = 0) {
@@ -153,37 +248,25 @@
   {
     do {
       y = y + movement[1][4];
-    } while (tilesOwned[x][y]);
+    } while (tileOwned[x][y]);
 
     let xi = x;
     let yi = y;
-    let direction = (tilesOwned[xi + 1][yi]) ? 4 : 1;
+    let direction = (tileOwned[xi + 1][yi]) ? 4 : 1;
     drawText("+1", (xi - cameraX) * 32 + 4, (yi - cameraY + 1) * 32 - 8, "24px Arial", "gold");
-    if (clickEnd != 0 && contains((xi - cameraX) * 32, (yi - cameraY) * 32, 32, 32, cursorX, cursorY))
-    {
-      tilesOwned[xi][yi] = true;
-      homeMenu = false;
-      return;
-    }
 
     xi = xi + movement[0][direction];
     yi = yi + movement[1][direction];
 
     do {
       drawText("+1", (xi - cameraX) * 32 + 4, (yi - cameraY + 1) * 32 - 8, "24px Arial", "gold");
-      if (clickEnd != 0 && contains((xi - cameraX) * 32, (yi - cameraY) * 32, 32, 32, cursorX, cursorY))
-      {
-        tilesOwned[xi][yi] = true;
-        homeMenu = false;
-        return;
-      }
 
       direction = loop(direction + 1, 1, 4);
 
-      if (tilesOwned[xi + movement[0][direction]][yi + movement[1][direction]]) {
+      if (tileOwned[xi + movement[0][direction]][yi + movement[1][direction]]) {
         do {
           direction = loop(direction - 1, 1, 4);
-        } while (tilesOwned[xi + movement[0][direction]][yi + movement[1][direction]]);
+        } while (tileOwned[xi + movement[0][direction]][yi + movement[1][direction]]);
       }
 
       xi = xi + movement[0][direction];
@@ -202,12 +285,15 @@
         {
           map[x] = [];
           tiles[x] = [];
-          tilesOwned[x] = [];
+          tileOwned[x] = [];
+          tileAction[x] = [];
+          tileCompleted[x] = [];
+          tileLevel[x] = [];
           //objects[x] = [];
         }
 				map[x][y] = 0;
 				tiles[x][y] = 0;
-				tilesOwned[x][y] = false;
+				//tileOwned[x][y] = false;
 			}
 		}
     generateSnow();
@@ -255,7 +341,7 @@
     let move = 1;
     let x;
     let y;
-    for (let i = 0; i < 250; i++) {
+    for (let i = 0; i < 50; i++) {
       size = rnd(6) + 3;
       x = rnd(mapWidth + 1);
       y = rnd(mapHeight + 1);
@@ -268,7 +354,7 @@
     let flow;
     let x;
     let y;
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < 800; i++) {
       slope = rnd(9); // 0 causes a pool, forces new flow, !chance new river
       flow = 3 * (rndCeil(30));
       x = rnd(mapWidth + 1);
@@ -304,8 +390,8 @@
          tiles[x][y] = 3; }}}
 
   function generateLand() {
-    tilesOwned[playerX][playerY] = true;
-    layerSq(true, playerX, playerY, 1, 3, tilesOwned); }
+    tileOwned[playerX][playerY] = true;
+    layerSq(true, playerX, playerY, 1, 3, tileOwned); }
 
   function expansion(val, def, gen, array = map) {
     for (let i = 0; i < def; i++) {
@@ -323,7 +409,7 @@
 
   function expandWater() {
     expansion(2, 2, 20, tiles);
-    expansion(2, 5, 40, tiles);
+    expansion(2, 2, 40, tiles);
     expansion(2, 2, 80, tiles); }
 
   function expandTrees() {
@@ -339,7 +425,47 @@
     if (leftPressed) {
       cameraX = range(--cameraX, 0, mapWidth - 59); }
     if (upPressed) {
-      cameraY = range(--cameraY, 0, mapHeight - 33); }}
+      cameraY = range(--cameraY, 0, mapHeight - 33); }
+
+    if (buildHouse)
+    {
+      let x = cameraX + cursorMapX;
+      let y = cameraY + cursorMapY;
+      if (clickEnd != 0 && playerGold >= 25 && tileOwned[x][y]
+        && ![1,4].includes(tiles[x][y])) {
+        tiles[x][y] = 4;
+        tileAction[x][y] = 1;
+        tileCompleted[x][y] = Date.now() + 10000;
+        tileLevel[x][y] = 1;
+        playerGold -= 25;
+      }
+    }
+  }
+
+  function logic1000() {
+
+    //units.set(new Tuple(cameraX + rnd(60), camera y + rnd(34), 0), "blue");
+    for (y = 0; y <= mapHeight; y++) {
+      for (x = 0; x <= mapWidth; x++) {
+        if (tileOwned[x][y])
+        {
+          if (tileAction[x][y] != 0) {
+            if (tileCompleted[x][y] <= Date.now()) {
+              let tile = tiles[x][y];
+              if (Number.isInteger(tile) && tile == 4) {
+                tileCompleted[x][y] = Date.now() + 10000;
+                playerGold += tileLevel[x][y];
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function set(val, x, y, array) {
+    array[x][y] = val;
+  }
 
 	function drawMap() {
 		let size = 32;
@@ -347,8 +473,9 @@
 			for (let x = 0; x < 60; x++) {
         let land = map[x + cameraX][y + cameraY];
         let tile = tiles[x + cameraX][y + cameraY];
+
         let outlineColor;
-        if (tilesOwned[x + cameraX][y + cameraY] == true)
+        if (tileOwned[x + cameraX][y + cameraY] == true)
         {
           outlineColor = "rgba(0,0,255,0.35)";
         }
@@ -372,11 +499,11 @@
         else {
           ctx.rect(cursorMapX * 32, cursorMapY * 32, 32, 32);
         }
-        ctx.strokeStyle = "rgba(255,255,255,1)";
+        ctx.strokeStyle = "darkgray";
         ctx.lineWidth = "3";
         ctx.stroke();
 
-        if (tile != 0)
+        if (Number.isInteger(tile) && tile != 0)
         {
           if (tile == 3)
           {
@@ -390,7 +517,7 @@
           }
           else if (tile == 4)
           {
-            drawHouse(x * 32, y * 32, 1, "rgba(69,69,69,0.7)");
+            drawHouse(x * 32, y * 32, 1, "rgba(69,69,69,0.7)", true);
           }
           else {
     				ctx.beginPath();
@@ -402,42 +529,66 @@
     				//ctx.stroke();
           }
         }
-       }}
+      }
+    }
 
 
-  if (homeMenu) {
-    traceProperty(playerX, playerY); }
+    if (buyLand) {
+      traceProperty(playerX, playerY); }
 
-  if (tileIndex) {
-  	for (let y = 0; y < 34; y++) {
-  		for (let x = 0; x < 60; x++) {
-  			ctx.font = "30px Arial";
-  			ctx.fillStyle = "black";
-  			ctx.fillText(tiles[x + cameraX][y + cameraY], 8 + x * 32, 28 + y * 32); }}}
-}
+    if (tileIndex) {
+    	for (let y = 0; y < 34; y++)
+      {
+    		for (let x = 0; x < 60; x++)
+        {
+    			ctx.font = "30px Arial";
+    			ctx.fillStyle = "black";
+    			ctx.fillText(tiles[x + cameraX][y + cameraY], 8 + x * 32, 28 + y * 32);
+        }
+      }
+    }
+  }
 
   function drawMod()
   {
 
   }
 
-  function drawText(text, x, y, font, color)
+  function drawText(text, x, y, font, color, stroke = false, strokeColor = "black", strokeWidth = 4)
   {
     ctx.font = font;
+    if (stroke)
+    {
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = strokeWidth;
+      ctx.strokeText(text, x, y);
+    }
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
   }
 
-  function drawHouse(x, y, scale, color)
+  function drawHouse(x, y, scale, color, stroke = false, strokeColor = "black", strokeWidth = 3)
   {
+    size = 0;
+    if (tileLevel[Math.floor(x / 32) + cameraX][Math.floor(y / 32) + cameraY] > 1) {
+      size = 4 * (tileLevel[Math.floor(x / 32) + cameraX][Math.floor(y / 32) + cameraY] - 1);
+      // Bug if house drawn to UI on a leveled up tile
+    }
     ctx.beginPath();
-    ctx.moveTo(x + 16 * scale, y + 4 * scale);
-    ctx.lineTo(x + 28 * scale, y + 16 * scale);
-    ctx.lineTo(x + 4 * scale, y + 16 * scale);
-    ctx.moveTo(x + 7 * scale, y + 16 * scale);
-    ctx.lineTo(x + 7 * scale, y + 28 * scale);
+    ctx.moveTo(x + 16 * scale, y + 4 * scale - size);
+    ctx.lineTo(x + 28 * scale, y + 16 * scale - size);
+    ctx.lineTo(x + 25 * scale, y + 16 * scale - size);
     ctx.lineTo(x + 25 * scale, y + 28 * scale);
-    ctx.lineTo(x + 25 * scale, y + 16 * scale);
+    ctx.lineTo(x + 7 * scale, y + 28 * scale);
+    ctx.lineTo(x + 7 * scale, y + 16 * scale - size);
+    ctx.lineTo(x + 4 * scale, y + 16 * scale - size);
+    ctx.lineTo(x + 16 * scale, y + 4 * scale - size);
+    if (stroke)
+    {
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = strokeWidth;
+      ctx.stroke();
+    }
     ctx.fillStyle = color;
     ctx.fill();
   }
@@ -451,6 +602,40 @@
     ctx.lineTo(x + 24 * scale, y + 28 * scale);
     ctx.lineTo(x + 8 * scale, y + 28 * scale);
     ctx.fill();
+  }
+
+  function drawMenu(x, y, width, height, func, menuID = 0) { //128, 64, 320, 32
+    height += 64 * (menuLogic[menuID].length - 1);
+    ctx.beginPath();
+    ctx.rect(x, y, width, height);
+    ctx.fillStyle = "rgba(0,0,0,0.05)";
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = "3";
+    ctx.fill();
+    ctx.stroke();
+
+    if (menuID != 0)
+    {
+      for (let i = 1; i < menuLogic[menuID].length; i++)
+      {
+        drawMenu(144, y - 32 + (64 * (i)), 288, 32, menuLogic[menuID][i]);
+        drawText(menuText[menuID][i], 164, y - 8 + (64 * (i)), "24px Arial", "lightgray", true);
+      }
+    }
+    else if (contains(x, y, width, height, cursorX, cursorY))
+    {
+      clickLock = true;
+      ctx.beginPath();
+      ctx.rect(x, y, width, height);
+      ctx.strokeStyle = "rgba(255,255,255,1)";
+      ctx.lineWidth = "5";
+      ctx.stroke();
+
+      if (clickEnd != 0)
+      {
+        func();
+      }
+    }
   }
 
   function drawObj()
@@ -467,10 +652,10 @@
     ctx.rect((playerX - cameraX) * 32 + 10, (playerY - cameraY) * 32 + 10, 12, 12)
     ctx.fill();
 
-    for (let i = 0; i < units.length - 1; i++)
-    {
-      drawUnit((units[i].x - cameraX) * 32, (units[i].y - cameraY) * 32, 1, units[i].color);
-    }
+    units.forEach( (unit, key, map) => {
+      drawText(key.x + key.y, 100, 100, "24px Arial", "gold");
+      drawUnit((key.x - cameraX) * 32, (key.y - cameraY) * 32, 1, unit);
+    });
   }
 
   function drawUI()
@@ -478,6 +663,10 @@
     let rectangle;
     let x;
     let y;
+
+    if (buildHouse) {
+      drawHouse(cursorMapX * 32, cursorMapY * 32, 1, "rgba(69,69,69,0.7)", true);
+    }
 
     ctx.font = "30px Arial";
     ctx.fillStyle = "black";
@@ -491,101 +680,67 @@
     ctx.font = "30px Arial";
     ctx.fillStyle = "silver";
     ctx.fillText(playerSilver, 8 + 192, 28);
+    ctx.font = "30px Arial";
+    ctx.fillStyle = "black";
+    ctx.fillText(fps, 8, 28 + 50);
 
+    // info menu button
     rect = [32, 64, 64, 64];
-    ctx.beginPath();
-    ctx.rect(rect[0], rect[1], rect[2], rect[3]);
-    ctx.fillStyle = "rgba(0,0,0,0.05)";
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.lineWidth = "3";
-    ctx.fill();
-    ctx.stroke();
+    drawMenu(rect[0], rect[1], rect[2], rect[3], menuLogic[1][0]);
     ctx.font = "60px Arial";
     ctx.fillStyle = "rgba(0,0,0,0.7)";
     ctx.fillText("i", 57, 118);
-    if (contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
-      {
-        ctx.beginPath();
-        ctx.rect(rect[0], rect[1], rect[2], rect[3]);
-        ctx.strokeStyle = "rgba(255,255,255,1)";
-        ctx.lineWidth = "5";
-        ctx.stroke();
-        if (clickEnd != 0) {
-          if (!tileIndex) {
-            tileIndex = true; }
-          else {
-            tileIndex = false; }
-        }
-      }
+    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
+    {
+      activeMenu = (activeMenu == 0) ? 1 : 0;
+    }
 
+    // home menu button
     rect = [32, 160, 64, 64];
-    ctx.beginPath();
-    ctx.rect(rect[0], rect[1], rect[2], rect[3]);
-    ctx.fillStyle = "rgba(0,0,0,0.05)";
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.lineWidth = "3";
-    ctx.fill();
-    ctx.stroke();
-    drawHouse(rect[0], rect[1], 2, "rgba(69,69,69,0.7)");
-    if (contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
-      {
-        ctx.beginPath();
-        ctx.rect(rect[0], rect[1], rect[2], rect[3]);
-        ctx.strokeStyle = "rgba(255,255,255,1)";
-        ctx.lineWidth = "5";
-        ctx.stroke();
+    drawMenu(rect[0], rect[1], rect[2], rect[3], menuLogic[2][0]);
+    drawHouse(rect[0], rect[1], 2, "rgba(69,69,69,0.7)", true);
+    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
+    {
+      activeMenu = (activeMenu == 0) ? 2 : 0;
+    }
 
-        if (clickEnd != 0) {
-          if (tileSelectX != 0 && tilesOwned[tileSelectX][tileSelectY] && tiles[tileSelectX][tileSelectY] != 4) {
-            tiles[tileSelectX][tileSelectY] = 4;
-            playerIncome++; }
+    // unit menu button
+    rect = [32, 256, 64, 64];
+    drawMenu(rect[0], rect[1], rect[2], rect[3], menuLogic[3][0]);
+    drawUnit(rect[0], rect[1], 2, "rgba(0,0,200,.5)")
+    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
+    {
+      activeMenu = (activeMenu == 0) ? 3 : 0;
+    }
 
-          if (!tileIndex) {
-            homeMenu = true; }
-        }
-      }
+    // lovely button
+    rect = [32, 352, 64, 64];
+    drawMenu(rect[0], rect[1], rect[2], rect[3], menuLogic[4][0]);
+    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
+    {
+      activeMenu = (activeMenu == 0) ? 4 : 0;
+    }
 
-      rect = [32, 256, 64, 64];
-      ctx.beginPath();
-      ctx.rect(rect[0], rect[1], rect[2], rect[3]);
-      ctx.fillStyle = "rgba(0,0,0,0.05)";
-      ctx.strokeStyle = "rgba(0,0,0,0.25)";
-      ctx.lineWidth = "3";
-      ctx.fill();
-      ctx.stroke();
-      drawUnit(rect[0], rect[1], 2, "rgba(0,0,200,.5)")
-      if (contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
-        {
-          ctx.beginPath();
-          ctx.rect(rect[0], rect[1], rect[2], rect[3]);
-          ctx.strokeStyle = "rgba(255,255,255,1)";
-          ctx.lineWidth = "5";
-          ctx.stroke();
-          if (clickEnd != 0) {
-            units.push(new Unit(rnd(60), rnd(34), "blue"));
-            if (!tileIndex) {
-              unitMenu = true; }
-            else {
-              unitMenu = false; }
-          }
-        }
-
-    ctx.beginPath();
-    ctx.rect(1568, 32, 320, 224);
-    ctx.fillStyle = "rgba(0,0,0,0.05)";
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.lineWidth = "3";
-    ctx.fill();
-    ctx.stroke();
+    let width = 320;
+    let height = 224;
     if (tileSelectX != 0 && tileSelectY != 0)
     {
       x = tileSelectX;
       y = tileSelectY;
+      if (![0,1,2,3].includes(tiles[x][y])) {
+        height = 448; }
     }
     else {
       x = cameraX + cursorMapX;
       y = cameraY + cursorMapY;
     }
+    ctx.beginPath();
+    ctx.rect(1568, 32, width, height);
+    ctx.fillStyle = "rgba(0,0,0,0.05)";
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = "3";
+    ctx.fill();
+    ctx.stroke();
     ctx.font = "40px Arial";
     ctx.fillStyle = "rgba(0,0,0,0.7)";
     ctx.fillText(biomeNames[map[x][y]], 1600, 100);
@@ -594,12 +749,33 @@
     ctx.fillText(tileNames[tiles[x][y]], 1600, 150);
     ctx.font = "40px Arial";
     ctx.fillStyle = "rgba(0,0,0,0.7)";
-    ctx.fillText(tilesOwned[x][y], 1600, 200);
+    ctx.fillText("Owned: " + ((!tileOwned[x][y]) ? false : true), 1600, 200);
+
+    if (![0,1,2,3].includes(tiles[x][y]))
+    {
+      ctx.font = "40px Arial";
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillText("Level: " + tileLevel[x][y], 1600, 250);
+      ctx.font = "40px Arial";
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillText("Action: " + tileAction[x][y], 1600, 300);
+      ctx.font = "40px Arial";
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillText("Pay In: " + Math.ceil((tileCompleted[x][y] - Date.now()) / 1000), 1600, 350);
+      drawMenu(1600, 416, 112, 32, () => {});
+      drawMenu(1744, 416, 112, 32, () => {});
+    }
+
+    if (activeMenu != 0)
+    {
+      drawMenu(128, 64, 320, 32, menuLogic[0][0], activeMenu);
+    }
 
     clickEnd = 0;
   }
 
 	function draw() {
+    clickLock = false;
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		drawMap();
     drawMod();
@@ -616,25 +792,64 @@
 
   function mouseDownHandler(e) {
     clickStart = Date.now();
-    if (infoMenu) {
-      infoMenu = false; }
-    //if (homeMenu) {
-      //homeMenu = false; }
-    if (unitMenu) {
-      unitMenu = false; }
 
+    if (activeMenu == 2) {
+      let x = playerX;
+      let y = playerY;
+      do {
+        y = y + movement[1][4];
+      } while (tileOwned[x][y]);
+
+      let xi = x;
+      let yi = y;
+      let direction = (tileOwned[xi + 1][yi]) ? 4 : 1;
+      if (playerGold >= 1 && contains((xi - cameraX) * 32, (yi - cameraY) * 32, 32, 32, cursorX, cursorY))
+      {
+        tileOwned[xi][yi] = true;
+        playerGold--;
+        return;
+      }
+
+      xi = xi + movement[0][direction];
+      yi = yi + movement[1][direction];
+
+      do {
+        if (playerGold >= 1 && contains((xi - cameraX) * 32, (yi - cameraY) * 32, 32, 32, cursorX, cursorY))
+        {
+          tileOwned[xi][yi] = true;
+          playerGold--;
+          return;
+        }
+
+        direction = loop(direction + 1, 1, 4);
+
+        if (tileOwned[xi + movement[0][direction]][yi + movement[1][direction]]) {
+          do {
+            direction = loop(direction - 1, 1, 4);
+          } while (tileOwned[xi + movement[0][direction]][yi + movement[1][direction]]);
+        }
+
+        xi = xi + movement[0][direction];
+        yi = yi + movement[1][direction];
+
+        if (xi == x && yi == y) { return; }
+      } while (true);
+    }
   }
 
   function mouseUpHandler(e) {
-    clickEnd = Date.now() - clickStart;
-    clickStart = 0;
+    if (clickStart != 0)
+    {
+      clickEnd = Date.now() - clickStart;
+      clickStart = 0;
+    }
 
     if (cameraX + cursorMapX == tileSelectX && cameraY + cursorMapY == tileSelectY)
     {
       tileSelectX = 0;
       tileSelectY = 0;
     }
-    else if (cursorX > 96) {
+    else if (!clickLock) {
       tileSelectX = cameraX + cursorMapX;
       tileSelectY = cameraY + cursorMapY;
     }
@@ -643,21 +858,28 @@
   function keyDownHandler(e) {
       if(e.key == "d") {
           rightPressed = true; }
-      else if(e.key == "s") {
+      if(e.key == "s") {
           downPressed = true; }
-      else if(e.key == "a") {
+      if(e.key == "a") {
           leftPressed = true; }
-      else if(e.key == "w") {
-          upPressed = true; }}
+      if(e.key == "w") {
+          upPressed = true; }
+      if (e.key == "Escape"){
+        activeMenu = 0;
+        buildHouse = false;
+        buyLand = false;
+        tileIndex = false;
+        tileSelectX = 0;
+        tileSelectY = 0; }}
 
   function keyUpHandler(e) {
       if(e.key == "d") {
           rightPressed = false; }
-      else if(e.key == "s") {
+      if(e.key == "s") {
           downPressed = false; }
-      else if(e.key == "a") {
+      if(e.key == "a") {
           leftPressed = false; }
-      else if(e.key == "w") {
+      if(e.key == "w") {
           upPressed = false; }}
 
   window.onload = init;
@@ -676,7 +898,26 @@
     cursorMapY = Math.floor(cursorY / 32);
   }
 
+  const times = [];
+  let fps;
+
+  function refreshLoop() {
+    window.requestAnimationFrame(() => {
+      const now = performance.now();
+      while (times.length > 0 && times[0] <= now - 1000) {
+        times.shift();
+      }
+      times.push(now);
+      fps = times.length;
+      refreshLoop();
+    });
+  }
+
+  // uploadData();
+
+  refreshLoop();
 	setInterval(logic, 20);
+	setInterval(logic1000, 1000);
 	setInterval(draw, 20);
 </script>
 

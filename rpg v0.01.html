@@ -21,37 +21,70 @@
 </script>
 
 <script>
-	/*class Tile {
-	  constructor(id, level) {
-	    this.x = x;
-      this.y = y;
-      this.owned = false;
-	  }
-	}*/
 
-  class Tuple {
+  class GPS {
     constructor(x, y, z) {
       this.x = x;
       this.y = y;
-      this.z = z;
-    }
+      this.z = z; }}
+  GPS.prototype.toString = function () {
+    return (padXYZ(this.x, this.y, this.z)); };
+
+  class Land {
+	  constructor(name, color) {
+      this.name = name;
+      this.color = color; }
   }
 
   class Tile {
-
+	  constructor(biome, capitol = null) {
+      this.biome = biome;
+      this.capitol = capitol; }
   }
 
   class Building {
+    constructor(id) {
+      this.id = id; }}
 
+  class Unit { // stats [level, ]
+	  constructor(name = "Shadders", stats = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) {
+      this.name = name;
+      this.stats = stats;
+      this.equipment = []; }}
+
+	class Army {
+    units = [];
+	  constructor(tileX, tileY, color, level = 0) {
+      this.tileX = tileX;
+      this.tileY = tileY;
+      this.color = color;
+      this.level = level;
+      this.health = 0;
+      this.attack = 0;
+      this.defense = 0;
+      this.speed = 0;
+      this.action = 0;
+      this.timeCompleted = 0;
+      this.direction = 0;
+      this.moveX = 0;
+      this.moveY = 0; }
+      
+      setStats() {
+
+      }}
+
+  class Region { // resources = [0, food, currency, culture, lumber, stone, 0, 0, 0, 0]
+    constructor(domain = [], resources = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) {
+      this.domain = domain;
+      this.resources = resources; }
   }
 
-	class Unit {
-	  constructor(x, y, color) {
-	    //this.x = x;
-      //this.y = y;
-      this.color = color;
-	  }
-	}
+  class Tech {
+	  constructor(name, id, requiredTechs, researched = false) {
+      this.name = name;
+      this.id = id;
+      this.requiredTechs = requiredTechs;
+      this.researched = researched; }}
 
   /*let { MoneyButtonClient } = require('@moneybutton/api-client');
   let moneyButtonClient = new MoneyButtonClient(b3536e2a2b10f7fbf0177c9660aa5d35);
@@ -61,10 +94,10 @@
 
 	let canvas = document.getElementById("myCanvas");
 	let ctx = canvas.getContext("2d");
-	let biomeDraws = ['#055000', 'white'];
-  let biomeNames = ["Grassland", "Snowy Region"];
-  let tileDraws = ['black', 'black', 'blue', '#808000', "rgba(69,69,69,1)"];
-  let tileNames = ["Zero", "Fill", "Water", "Forest", "House"];
+	let biomeDraws = ['#055000', 'white', "goldenrod"];
+  let biomeNames = ["Grassland", "Snowy Region", "Desert"];
+  let tileDraws = ['black', 'black', 'darkblue', '#808000', "rgba(150,150,150,1)", "rgba(69,69,69,1)"];
+  let tileNames = ["Zero", "Fill", "Water", "Forest", "Mountain", "House"];
 
 
   let tileIndex = false; // render tile layer index for testing
@@ -88,16 +121,16 @@
   let playerSilver = 20;
   let tileSelectX = 0;
   let tileSelectY = 0;
-  let rightPressed = false;
-  let leftPressed = false;
-  let upPressed = false;
-  let downPressed = false;
+  let selectedArmy = null;
+  let keyMap = {};
   let clickStart = 0;
   let clickEnd = 0;
   let clickLock = false;
   let tileAdded = false;
   let buildHouse = false;
   let uploading = false;
+  let showUI = true;
+  let showTech = false;
 
 	let map = [];
 	let tiles = [];
@@ -106,18 +139,54 @@
   let tileCompleted = [];
   let tileLevel = [];
   let activeMenu = 0;
+  let activeSubMenu = 0;
+  let planInfo = 0;
+  let units = [];
+  units.push(new Unit(rndArray()));
+  units.push(new Unit(rndArray()));
+  units.push(new Unit(rndArray()));
+  units.push(new Unit(rndArray()));
+  units.push(new Unit(rndArray()));
+
+  let tileLogic = [];
+  
+  let techs = [
+    [new Tech("Agriculture", [0, 0], [], true)],
+    [new Tech("Pottery", [1, 0], []), new Tech("Animal Husbandry", [1, 1], []), 
+      new Tech("Archery", [1, 2], []), new Tech("Mining", [1, 3], [])], 
+    [new Tech("Sailing", [2, 0], [[1, 0]]), new Tech("Calendar", [2, 1], [[1, 0]]), new Tech("Writing", [2, 2], [[1, 0]]), 
+      new Tech("Trapping", [2, 3], [[1, 1]]), new Tech("The Wheel", [2, 4], [[1, 1], [1, 2]]), 
+      new Tech("Masonry", [2, 5], [[1, 3]]), new Tech("Bronze Working", [2, 6], [[1, 3]])],
+    [new Tech("Optics", [3, 0], [[2, 0]]), new Tech("Horseback Riding", [3, 1], [[2, 3], [2, 4]]), 
+      new Tech("Mathematics", [3, 2], [[2, 4]]), new Tech("Construction", [3, 3], [[2, 4], [2, 5]])],
+    [new Tech("Philosophy", [4, 0], [[2, 1], [2, 2]]), new Tech("Drama", [4, 1], [[2, 2]]), new Tech("Currency", [4, 2], [[3, 2]]),
+      new Tech("Engineering", [4, 3], [[3, 2], [3, 3]]), new Tech("Iron Working", [4, 4], [[2, 6]])]
+  ]; // [tier][id]
+
   let menuText = [
     [],
-    ["Btn", "Draw Tile Index"],
-    ["Btn", "Build House (25:1)", "Buy Land", "Level Up (10X:1)", ""],
-    ["Btn", "Spawn Unit"],
-    ["Btn"]];
-  let menuLogic = [[],[],[],[],[]];
+    ["Btn", "Draw Tile Index", "Schematics", "Blueprints", "Technology"],
+    ["Btn", "Build House (25:1)", "Buy Land", "Level Up (10X:1)", "", ""],
+    ["Btn", "Unit List", "Spawn Unit"],
+    ["Btn"],
+    ["Btn", "Wood Pick", "Wood Axe", "Wood Sword", "Wood Spear", "Wood Shield", 
+      "Stone Pick", "Stone Axe", "Stone Sword", "Stone Spear", "Stone Shield"],
+    ["Btn", "House", "Lumbermill", "Mine", "Castle"],
+    ["Btn", "Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5"]];
+
+  let menuLogic = [[],[],[],[],[],[],[],[]];
   menuLogic[0][0] = () => {};
 
   menuLogic[1][0] = () => {}; // info menu main button function
   menuLogic[1][1] = () => {
     tileIndex = !tileIndex; };
+  menuLogic[1][2] = () => {
+    activeSubMenu = (activeSubMenu == 0) ? 5 : 0; };
+  menuLogic[1][3] = () => {
+    activeSubMenu = (activeSubMenu == 0) ? 6 : 0; };
+  menuLogic[1][4] = () => {
+    showUI = false;
+    showTech = true; };
 
   menuLogic[2][0] = () => {}; // home menu main button function
   menuLogic[2][1] = () => {
@@ -128,22 +197,65 @@
     if (playerGold >= 10 * tileLevel[tileSelectX][tileSelectY]) {
       playerGold -= 10 * tileLevel[tileSelectX][tileSelectY];
       tileLevel[tileSelectX][tileSelectY]++; }};
-  menuLogic[2].push(menuLogic[0][0]);
-  menuLogic[2].push(menuLogic[0][0]);
+  menuLogic[2].push(() => {});
+  menuLogic[2].push(() => {});
 
-  menuLogic[3][0] = () => {}; // unit menu main button function
+  menuLogic[3][0] = () => {}; // army menu main button function
   menuLogic[3][1] = () => {
-    units.set(new Tuple(rnd(60) + cameraX, rnd(34) + cameraY, 0), "blue"); };
+    activeSubMenu = (activeSubMenu == 0) ? 7 : 0; };
+  menuLogic[3][2] = () => {
+    armies.set(padXYZ(rnd(60) + cameraX, rnd(34) + cameraY, 0), new Army(0, 0, "blue")); };
     
   menuLogic[4][0] = () => {
-    playerGold += 100;
-  }; // lovely button function
+    playerGold += 100; }; // lovely button function
 
-  //let objects = [];
-  let units = new Map();
-  units.set(new Tuple(40, 40, 0), "blue");
+  menuLogic[5][0] = () => {}; // schematics menu
+  menuLogic[5][1] = () => {};
+  menuLogic[5][2] = () => {};
+  menuLogic[5][3] = () => {};
+  menuLogic[5][4] = () => {};
+  menuLogic[5][5] = () => {};
+  menuLogic[5][6] = () => {};
+  menuLogic[5][7] = () => {};
+  menuLogic[5][8] = () => {};
+  menuLogic[5][9] = () => {};
+  menuLogic[5][10] = () => {};
+
+  menuLogic[6][0] = () => {}; // blueprints menu
+  menuLogic[6][1] = () => {};
+  menuLogic[6][2] = () => {};
+  menuLogic[6][3] = () => {};
+  menuLogic[6][4] = () => {};
+
+  menuLogic[7][0] = () => {}; // unit list
+  menuLogic[7][1] = () => {};
+  menuLogic[7][2] = menuLogic[7][1];
+  menuLogic[7][3] = menuLogic[7][1];
+  menuLogic[7][4] = menuLogic[7][1];
+  menuLogic[7][5] = menuLogic[7][1];
+
+  // !!! // IMPORTANT NOTE // TEMPORARY FIX // !!! //
+  // army keys are handled by converting to and from STRING manually //
+  // this was implemented to solve anonymous map access issues //
+  // ideal solution is to be able to access map values with anonymous keys //
+  // I.E. comparing objects by likeness, instead of memory value (cached) //
+  // NOT IDEAL, IMO //
+  let armies = new Map();
+  {
+    let newArmy = new Army(0, 0, "blue", 10);
+    let key = padXYZ(playerX, playerY + 1, 0);
+    newArmy.units.push(units[0]);
+    newArmy.units.push(units[1]);
+    newArmy.units.push(units[2]);
+    armies.set(key, newArmy);
+  }
+  let regions = new Map();
+  {
+    let newRegion = new Region();
+    let key = padXYZ(playerX, playerY, 0);
+    regions.set(key, newRegion);
+  }
   let buildings = new Map();
-  units.set(new Tuple(playerX, playerY, 0), "blue");
 	let ID = [];
   let movement = [[0, 1, 0, -1, 0], [0, 0, 1, 0, -1]];
   let movementFull = [[0, 1, 1, 0, -1, -1, -1, 0, 1], [0, 0, 1, 1, 1, 0, -1, -1, -1]];
@@ -200,12 +312,40 @@
     //upload(bsv.Script.buildDataOut(arrMny).toASM());
   }*/
 
+  // UNTESTED // Padding functions may malfunction if NUM has >1 significant digits
+  // ALSO // Current default length of 3 relies on a map with max size of 999
+  function padVal(val, length = 3, num = 0) {
+    return val.toString().padStart(length, num) }
+
+  function valPad(val, length = 3, num = 0) {
+    return val.toString().padEnd(length, num) }
+
+  // padXYZ() converts x, y, z into a single string for standardized use as an index //
+  function padXYZ(x, y, z, length = 3, num = 0) {
+    return (padVal(x, length, num) + padVal(y, length, num) + padVal(z, length, num)); }
+
+  // sliceXYZ() reverts standardized index strings into a new GPS(x, y, z)
+  function sliceXYZ(str) {
+    return (new GPS(Number(str.slice(0, 3)), Number(str.slice(3, 6)), Number(str.slice(6, 9)))); }
+
+  function set(val, x, y, array) {
+    array[x][y] = val; }
+
+  function getSign(num) {
+    return ((num == 0) ? 0 : (Math.abs(num) / num)); }
+
 	function rnd(max, min = 0) {
 		return min + Math.floor(Math.random() * max); }
 
 	function rndCeil(max, min = 0) {
 		return min + Math.ceil(Math.random() * max); }
 
+  function rndArray(length = 10, max = 4, min = 0, arr = []) {
+    for (i = 0; i < length; i++) { 
+      arr[i] = rnd(max, min); }
+    return (arr); }
+
+  // loop() returns num after looping it until within range //
   function loop(num, min, max) {
     range = max - min;
     if (num > max) {
@@ -216,36 +356,59 @@
       loop(num, min, max); }
     return num; }
 
+  // JAVASCRIPT STRUGGLE-BUS //
+  // I've tried and tried and tried, but can't figure out how this breaks //
+  // When running the function traceProperty for BuyLand movement breaks //
+  // I've currently removed range checking from movement pending tests //
+  // This may require reverting this function to a true/false //
+  // I liked adjusting value to edges of boundaries, but I give up on this //
+  // This is one more beyond baffling and frustrating struggle with JavaScript //
   function range(num, min, max) {
-    if (num > max) {
-      num = max; }
-    if (num < min) {
-      num = min; }
-    return num; }
+    return ((num > max) ? max : ((num < min) ? min : num)); }
 
+  // inRange() returns true if num is within min && max //
+  // Solves issues of range() failing to return/set the correct value //
+  function inRange(num, min = 0, max = 999) {
+    return ((num <= max && num >= min) ? true : false ) }
+
+  // contains() returns true if within rectangle bounds (x, y, width, height) //
   function contains(x, y, width, height, checkX, checkY) {
-      if (x <= checkX && checkX <= x + width && y <= checkY && checkY <= y + height)
-      {
-        return true;
-      }
-      return false;
-  }
+      return ((x <= checkX && checkX <= x + width && y <= checkY && checkY <= y + height) ? true : false); }
 
   function checkAdj(val, x, y, array = map) // returns seed percentage
   {
     let seed = 0;
-    for (let i = 1; i <= 4; i++)
-    {
-      if (array[range(x + movement[0][i], 0, 999)][range(y + movement[1][i], 0, 999)] == val)
-      {
-        seed += .25;
+    for (let i = 1; i <= 4; i++) {
+      if (array[range(x + movement[0][i], 0, 999)][range(y + movement[1][i], 0, 999)] == val) {
+        seed += .25; }}
+    return seed; }
+
+  function techAvailable(tech) {
+    for (let i = 0; i < tech.requiredTechs.length; i++) {
+      if (!techs[tech.requiredTechs[i][0]][tech.requiredTechs[i][1]].researched) {
+        return false; }}
+    return true; }
+
+/*
+  function setResources(region) {
+    let res = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let workBonus;
+    for (let i = 0; i < region.domain.length; i++) {
+      gps = region.domain[i];
+      key = padXYZ(gps.x, gps.y, gps.z);
+      workBonus = (armies.has(key)) ? armies.get(key).level : 1;
+      if (tiles[gps.x][gps.y] > 4) {
+        res[3] += workBonus;
+        res[2] += workBonus;
+      }
+      else {
+        res[1] += workBonus;
       }
     }
-    return seed;
-  }
+    region.resources = res;
+  } */
 
-  function traceProperty(x, y)
-  {
+  function traceProperty(x, y) {
     do {
       y = y + movement[1][4];
     } while (tileOwned[x][y]);
@@ -254,7 +417,6 @@
     let yi = y;
     let direction = (tileOwned[xi + 1][yi]) ? 4 : 1;
     drawText("+1", (xi - cameraX) * 32 + 4, (yi - cameraY + 1) * 32 - 8, "24px Arial", "gold");
-
     xi = xi + movement[0][direction];
     yi = yi + movement[1][direction];
 
@@ -262,47 +424,40 @@
       drawText("+1", (xi - cameraX) * 32 + 4, (yi - cameraY + 1) * 32 - 8, "24px Arial", "gold");
 
       direction = loop(direction + 1, 1, 4);
-
       if (tileOwned[xi + movement[0][direction]][yi + movement[1][direction]]) {
         do {
           direction = loop(direction - 1, 1, 4);
-        } while (tileOwned[xi + movement[0][direction]][yi + movement[1][direction]]);
-      }
-
+        } while (tileOwned[xi + movement[0][direction]][yi + movement[1][direction]]); }
       xi = xi + movement[0][direction];
       yi = yi + movement[1][direction];
-
+      
       if (xi == x && yi == y) { return; }
-    } while (true);
+    } while (buyLand);
   }
 
 	async function generateMap() {
-		for (let y = 0; y <= mapHeight; y++)
-		{
-			for (let x = 0; x <= mapWidth; x++)
-			{
-        if (y == 0)
-        {
+		for (let y = 0; y <= mapHeight; y++) {
+			for (let x = 0; x <= mapWidth; x++) {
+        if (y == 0) {
           map[x] = [];
           tiles[x] = [];
           tileOwned[x] = [];
           tileAction[x] = [];
           tileCompleted[x] = [];
-          tileLevel[x] = [];
-          //objects[x] = [];
-        }
+          tileLevel[x] = []; }
 				map[x][y] = 0;
-				tiles[x][y] = 0;
-				//tileOwned[x][y] = false;
-			}
-		}
+				tiles[x][y] = 0; }}
+
     generateSnow();
     expandSnow();
+    generateDesert();
+    expandDesert();
     generateWater();
     expandWater();
-    generateTrees();
-    expandTrees();
-	}
+    generateForests();
+    expandForests();
+    generateMountains();
+    expandMountains(); }
 
   function layer(val, x, y, min, max, array = map) {
     for (let i = min; i <= max; i++) {
@@ -315,8 +470,10 @@
           y += movementFull[1][ii];
           array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val; }}}}
 
-  function layerSq(val, x, y, min, max, array = map) {
+  function layerSq(val, x, y, min, max, array = map, addDomain = false) {
     for (let i = min; i <= max; i++) {
+      let gps;
+      let domainKey = padXYZ(playerX, playerY, 0);
       x--;
       y--;
       array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val;
@@ -324,7 +481,11 @@
         for (let iii = 0; iii < i * 2; iii++) {
           x += movement[0][ii];
           y += movement[1][ii];
-          array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val; }}}}
+          array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val; 
+          if (addDomain) {
+            gps = new GPS(x, y, 0);
+            regions.get(domainKey).domain.push(gps);
+          }}}}}
 
   function pool(val, x, y, array) {
     let i = 0;
@@ -332,21 +493,30 @@
     do {
       layer(val, x, y, i, i + 1, array);
       slope = rnd(9);
-      i++; }
-    while (slope == 0);
+      i++; } while (slope == 0);
     return (slope); }
 
 	function generateSnow() {
     let size;
-    let move = 1;
     let x;
     let y;
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 100; i++) {
       size = rnd(6) + 3;
       x = rnd(mapWidth + 1);
       y = rnd(mapHeight + 1);
       map[x][y] = 1;
       layer(1, x, y, 1, size, map); }}
+
+	function generateDesert() {
+    let size;
+    let x;
+    let y;
+    for (let i = 0; i < 150; i++) {
+      size = rnd(6) + 3;
+      x = rnd(mapWidth + 1);
+      y = rnd(mapHeight + 1);
+      map[x][y] = 2;
+      layer(2, x, y, 1, size, map); }}
 
 	function generateWater() {
     let slope;
@@ -355,43 +525,52 @@
     let x;
     let y;
     for (let i = 0; i < 800; i++) {
-      slope = rnd(9); // 0 causes a pool, forces new flow, !chance new river
+      slope = rnd(9); // 0 causes a pool, forces new flow, !chance of new river
       flow = 3 * (rndCeil(30));
       x = rnd(mapWidth + 1);
       y = rnd(mapHeight + 1);
       tiles[x][y] = 2;
+      
       if (slope == 0) {
-        slope = pool(2, x, y, tiles);
-      }
+        slope = pool(2, x, y, tiles); }
+
       do {
         x = range((x + movementFull[0][slope]), 0, 999);
         y = range((y + movementFull[1][slope]), 0, 999);
         tiles[x][y] = 2;
-        if (rnd(5) < 1)
-        {
+        if (rnd(5) < 1) {
           slope = rnd(9);
-          if (slope == 0)
-          {
-            slope = pool(2, x, y, tiles);
-          }
-        }
-        flow--;
-      }
-      while (flow > 0);
-     }}
+          if (slope == 0) {
+            slope = pool(2, x, y, tiles); }}
 
-	function generateTrees() {
+        flow--; } while (flow > 0); }}
+
+	function generateForests() {
      let x;
      let y;
      for (let i = 0; i < 200000; i++) {
        x = rnd(999);
        y = rnd(999)
-       if (tiles[x][y] == 0) {
+       if (tiles[x][y] == 0 && map[x][y] != 2) {
          tiles[x][y] = 3; }}}
 
+	function generateMountains() {
+    let x;
+    let y;
+    for (let i = 0; i < 100000; i++) {
+      x = rnd(999);
+      y = rnd(999)
+      if (tiles[x][y] == 0) {
+        tiles[x][y] = 4; }
+      if (map[x][y] == 1 && rnd(7) >= 5) {
+        layer(4, x, y, 1, 1, tiles); }}}
+
   function generateLand() {
+    let gps = new GPS(playerX, playerY, 0);
+    let key = padXYZ(playerX, playerY, 0);
     tileOwned[playerX][playerY] = true;
-    layerSq(true, playerX, playerY, 1, 3, tileOwned); }
+    regions.get(key).domain.push(gps);
+    layerSq(true, playerX, playerY, 1, 3, tileOwned, true); }
 
   function expansion(val, def, gen, array = map) {
     for (let i = 0; i < def; i++) {
@@ -407,168 +586,249 @@
     expansion(1, 5, 30);
     expansion(1, 1, 75); }
 
+  function expandDesert() {
+    expansion(2, 5, 15);
+    expansion(2, 5, 30);
+    expansion(2, 2, 75); }
+
   function expandWater() {
     expansion(2, 2, 20, tiles);
     expansion(2, 2, 40, tiles);
     expansion(2, 2, 80, tiles); }
 
-  function expandTrees() {
+  function expandForests() {
     expansion(3, 1, 35, tiles);
     expansion(3, 1, 60, tiles);
     expansion(3, 1, 85, tiles); }
 
+  function expandMountains() {
+    expansion(4, 1, 25, tiles);
+    expansion(4, 1, 50, tiles);
+    expansion(4, 1, 80, tiles); }
+
+  onkeydown = onkeyup = function(e) {
+    e = e || event; // IE Compatibility
+    keyMap[e.keyCode] = e.type == 'keydown'; }
+
+  function ai(army, location) {
+    let moveX = (army.moveX != 0) ? (army.moveX / (Math.abs(army.moveX))) : -(army.tileX / (Math.abs(army.tileX)));
+    let moveY = (army.moveY != 0) ? (army.moveY / (Math.abs(army.moveY))) : -(army.tileY / (Math.abs(army.tileY)));
+    if ((army.moveX != 0 || army.tileX != 0)
+      && !armies.has(padXYZ(location.x + moveX, location.y, location.z))) {
+      army.tileX += moveX;
+      if (!inRange(army.tileX, -15, 16)) {
+        army.tileX = loop(army.tileX, -15, 16);
+        army.moveX -= moveX;
+        armies.delete(padXYZ(location.x, location.y, location.z));
+        location.x += moveX;
+        armies.set(padXYZ(location.x, location.y, location.z), army);
+      }
+    }
+    if ((army.moveY != 0 || army.tileY != 0) 
+      && !armies.has(padXYZ(location.x, location.y + moveY, location.z))) {
+      army.tileY += moveY;
+      if (!inRange(army.tileY, -15, 16)) {
+        army.tileY = loop(army.tileY, -15, 16);
+        army.moveY -= moveY;
+        armies.delete(padXYZ(location.x, location.y, location.z));
+        location.y += moveY;
+        armies.set(padXYZ(location.x, location.y, location.z), army);
+      }
+    }
+  }
+
   function logic() {
-    if (rightPressed) {
-      cameraX = range(++cameraX, 0, mapWidth - 59); }
-    if (downPressed) {
-      cameraY = range(++cameraY, 0, mapHeight - 33); }
-    if (leftPressed) {
-      cameraX = range(--cameraX, 0, mapWidth - 59); }
-    if (upPressed) {
-      cameraY = range(--cameraY, 0, mapHeight - 33); }
+    if (keyMap[68] && inRange(cameraX + 1, 0, mapWidth - 59)) { // d
+      cameraX++; }
+    if (keyMap[83] && inRange(cameraY + 1, 0, mapHeight - 33)) { // s
+      cameraY++; }
+    if (keyMap[65] && inRange(cameraX - 1)) { // a
+      cameraX--; }
+    if (keyMap[87] && inRange(cameraY - 1)) { // w
+      cameraY--; }
+      
+    if (keyMap[27]) {
+      activeMenu = 0;
+      activeSubMenu = 0;
+      buildHouse = false;
+      buyLand = false;
+      tileIndex = false;
+      tileSelectX = 0;
+      tileSelectY = 0;
+      selectedArmy = null;
+      showUI = true;
+      showTech = false; }
+
+
+    selectedArmy = null;
+    let key = [ ...armies.keys() ];
+    let army = [ ...armies.values() ];
+    for (i = 0; i < key.length; i++){
+      let location = sliceXYZ(key[i]);
+      if (tileSelectX == location.x && tileSelectY == location.y) {
+        selectedArmy = key[i];
+      }
+      ai(army[i], location);
+    }
 
     if (buildHouse)
     {
       let x = cameraX + cursorMapX;
       let y = cameraY + cursorMapY;
       if (clickEnd != 0 && playerGold >= 25 && tileOwned[x][y]
-        && ![1,4].includes(tiles[x][y])) {
-        tiles[x][y] = 4;
+        && tiles[x][y] == 0) {
+        tiles[x][y] = 5;
         tileAction[x][y] = 1;
         tileCompleted[x][y] = Date.now() + 10000;
         tileLevel[x][y] = 1;
-        playerGold -= 25;
-      }
-    }
+        playerGold -= 25; }}
   }
 
   function logic1000() {
+    //let key = padXYZ(playerX, playerY, 0);
+    //let region = regions.get(key);
 
-    //units.set(new Tuple(cameraX + rnd(60), camera y + rnd(34), 0), "blue");
     for (y = 0; y <= mapHeight; y++) {
       for (x = 0; x <= mapWidth; x++) {
-        if (tileOwned[x][y])
-        {
+        if (tileOwned[x][y]) {
           if (tileAction[x][y] != 0) {
             if (tileCompleted[x][y] <= Date.now()) {
               let tile = tiles[x][y];
-              if (Number.isInteger(tile) && tile == 4) {
+              if (Number.isInteger(tile) && tile == 5) {
                 tileCompleted[x][y] = Date.now() + 10000;
-                playerGold += tileLevel[x][y];
-              }
-            }
-          }
-        }
+                playerGold += tileLevel[x][y]; }}}}
       }
     }
-  }
-
-  function set(val, x, y, array) {
-    array[x][y] = val;
   }
 
 	function drawMap() {
 		let size = 32;
+    let land;
+    let tile;
+    let outlineColor;
+
+    // draw first layer (land/biome) //
 		for (let y = 0; y < 34; y++) {
 			for (let x = 0; x < 60; x++) {
-        let land = map[x + cameraX][y + cameraY];
-        let tile = tiles[x + cameraX][y + cameraY];
+        land = map[x + cameraX][y + cameraY];
+        outlineColor = (tileOwned[x + cameraX][y + cameraY]) ? 
+          "rgba(0,0,255,0.35)" : "rgba(0,0,0,0.05)";
+        drawRectangle(x * 32, y * 32, size, size, true, true,
+          biomeDraws[land], outlineColor, "1"); }}
 
-        let outlineColor;
-        if (tileOwned[x + cameraX][y + cameraY] == true)
-        {
-          outlineColor = "rgba(0,0,255,0.35)";
-        }
-        else
-        {
-          outlineColor = "rgba(0,0,0,0.05)";
-        }
-				ctx.beginPath();
-				ctx.rect(x * 32, y * 32, size, size);
-				ctx.fillStyle = biomeDraws[land];
-				ctx.strokeStyle = outlineColor;
-				ctx.lineWidth = "1";
-				ctx.fill();
-				ctx.stroke();
+    // draw selected tile || tile @ cursor position //
+    let rect = (tileSelectX != 0 && tileSelectY != 0) 
+      ? [(tileSelectX - cameraX) * 32, (tileSelectY - cameraY) * 32, 32, 32] 
+      : [cursorMapX * 32, cursorMapY * 32, 32, 32];
+    drawRectangle(rect[0], rect[1], rect[2], rect[3], false, true, "black", "darkgray");
 
-        ctx.beginPath();
-        if (tileSelectX != 0 && tileSelectY != 0)
-        {
-          ctx.rect((tileSelectX - cameraX) * 32, (tileSelectY - cameraY) * 32, 32, 32);
-        }
-        else {
-          ctx.rect(cursorMapX * 32, cursorMapY * 32, 32, 32);
-        }
-        ctx.strokeStyle = "darkgray";
-        ctx.lineWidth = "3";
-        ctx.stroke();
-
-        if (Number.isInteger(tile) && tile != 0)
-        {
-          if (tile == 3)
-          {
+    // draw second layer (tiles)
+    for (let y = 0; y < 34; y++) {
+      for (let x = 0; x < 60; x++) {
+        tile = tiles[x + cameraX][y + cameraY];
+        if (Number.isInteger(tile) && tile != 0) {
+          if (tile == 3) {
             ctx.beginPath();
             ctx.moveTo(x * 32 + 16, y * 32 + 8);
-            ctx.lineTo(x * 32 + 28, y * 32 + 28);
-            ctx.lineTo(x * 32 + 4, y * 32 + 28);
+            ctx.lineTo(x * 32 + 24, y * 32 + 24);
+            ctx.lineTo(x * 32 + 8, y * 32 + 24);
+            ctx.lineTo(x * 32 + 16, y * 32 + 8);
     				ctx.fillStyle = "#6E2C00";
-            //ctx.lineTo(x * 32 + 16, y * 32 + 8);
-            ctx.fill();
-          }
-          else if (tile == 4)
-          {
-            drawHouse(x * 32, y * 32, 1, "rgba(69,69,69,0.7)", true);
-          }
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = "2";
+            ctx.stroke();
+            ctx.fill(); }
+          else if (tile == 4) {
+            drawTriangle(x * 32, y * 32, 1, "rgba(150,150,150,0.7)", true); }
+          else if (tile == 5) {
+            drawHouse(x * 32, y * 32, 1, "rgba(69,69,69,0.7)", true); }
           else {
-    				ctx.beginPath();
-    				ctx.rect(x * 32, y * 32, size, size);
-    				ctx.fillStyle = tileDraws[tile];
-    				//ctx.strokeStyle = "rgba(0,0,0,0.05)";
-    				//ctx.lineWidth = "1";
-    				ctx.fill();
-    				//ctx.stroke();
-          }
+            drawRectangle(x * 32, y * 32, size, size, true, false, tileDraws[tile]); }
         }
       }
     }
 
-
+    // trace the domain to show available lands for purchase //
     if (buyLand) {
       traceProperty(playerX, playerY); }
 
+    // draw second layer index value on top of each tile //
     if (tileIndex) {
-    	for (let y = 0; y < 34; y++)
-      {
-    		for (let x = 0; x < 60; x++)
-        {
-    			ctx.font = "30px Arial";
-    			ctx.fillStyle = "black";
-    			ctx.fillText(tiles[x + cameraX][y + cameraY], 8 + x * 32, 28 + y * 32);
-        }
-      }
-    }
+    	for (let y = 0; y < 34; y++) {
+    		for (let x = 0; x < 60; x++) {
+          drawText(tiles[x + cameraX][y + cameraY], 8 + x * 32, 28 + y * 32, "30px Arial"); }}}
   }
 
-  function drawMod()
-  {
+  function drawMod() {
 
   }
 
-  function drawText(text, x, y, font, color, stroke = false, strokeColor = "black", strokeWidth = 4)
-  {
+  function drawText(text, x, y, font = "24px Arial", color = "black", 
+      stroke = false, strokeColor = "black", strokeWidth = 4) {
     ctx.font = font;
-    if (stroke)
-    {
+    if (stroke) {
       ctx.strokeStyle = strokeColor;
       ctx.lineWidth = strokeWidth;
-      ctx.strokeText(text, x, y);
-    }
+      ctx.strokeText(text, x, y); }
     ctx.fillStyle = color;
-    ctx.fillText(text, x, y);
+    ctx.fillText(text, x, y); }
+
+  function drawRectangle(x, y, width, height, fill = true, stroke = true,
+      fillColor = "black", strokeColor = "black", strokeWidth = "3") {
+    ctx.beginPath();
+    ctx.rect(x, y, width, height);
+    if (stroke) { 
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = strokeWidth;
+      ctx.stroke(); }
+    if (fill) { 
+      ctx.fillStyle = fillColor; 
+      ctx.fill(); }}
+
+  function drawTriangle(x, y, scale, color, stroke = false, strokeColor = "black", strokeWidth = 2) {
+    size = 0;
+    if (tileLevel[Math.floor(x / 32) + cameraX][Math.floor(y / 32) + cameraY] > 1) {
+      size = 4 * (tileLevel[Math.floor(x / 32) + cameraX][Math.floor(y / 32) + cameraY] - 1);
+      // Bug if house drawn to UI on a leveled up tile
+    }
+    ctx.beginPath();
+    ctx.moveTo(x + 16 * scale, y + 4 * scale - size);
+    ctx.lineTo(x + 28 * scale, y + 28 * scale - size);
+    ctx.lineTo(x + 4 * scale, y + 28 * scale - size);
+    ctx.lineTo(x + 16 * scale, y + 4 * scale - size);
+
+    if (stroke) {
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = strokeWidth;
+      ctx.stroke(); }
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+  
+  function drawTree(x, y) {
+    ctx.beginPath();
+    ctx.moveTo(x + 16, y + 4);
+    ctx.lineTo(x + 28, y + 10);
+    ctx.lineTo(x + 20, y + 10);
+    ctx.lineTo(x + 28, y + 14);
+    ctx.lineTo(x + 20, y + 14);
+    ctx.lineTo(x + 28, y + 18);
+    ctx.lineTo(x + 4, y + 18);
+    ctx.lineTo(x + 12, y + 14);
+    ctx.lineTo(x + 4, y + 14);
+    ctx.lineTo(x + 12, y + 10);
+    ctx.lineTo(x + 4, y + 10);
+    ctx.lineTo(x + 16, y + 4);
+    ctx.lineTo(x + 4, y + 28);
+    ctx.fillStyle = "green";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.rect(x + 14, y + 18, 4, 10);
+    ctx.fillStyle = "saddlebrown";
+    ctx.fill();
   }
 
-  function drawHouse(x, y, scale, color, stroke = false, strokeColor = "black", strokeWidth = 3)
-  {
+  function drawHouse(x, y, scale, color, stroke = false, strokeColor = "black", strokeWidth = 3) {
     size = 0;
     if (tileLevel[Math.floor(x / 32) + cameraX][Math.floor(y / 32) + cameraY] > 1) {
       size = 4 * (tileLevel[Math.floor(x / 32) + cameraX][Math.floor(y / 32) + cameraY] - 1);
@@ -583,106 +843,77 @@
     ctx.lineTo(x + 7 * scale, y + 16 * scale - size);
     ctx.lineTo(x + 4 * scale, y + 16 * scale - size);
     ctx.lineTo(x + 16 * scale, y + 4 * scale - size);
-    if (stroke)
-    {
+
+    if (stroke) {
       ctx.strokeStyle = strokeColor;
       ctx.lineWidth = strokeWidth;
-      ctx.stroke();
-    }
+      ctx.stroke(); }
     ctx.fillStyle = color;
-    ctx.fill();
-  }
+    ctx.fill(); }
 
-  function drawUnit(x, y, scale, color)
-  {
+  function drawArmy(x, y, scale, color) {
     ctx.beginPath();
     ctx.fillStyle = color;
     ctx.arc(x + (16 * scale), y + (10 * scale), 6 * scale, 0, Math.PI * 2, true);
     ctx.moveTo(x + 16 * scale, y + 16 * scale);
     ctx.lineTo(x + 24 * scale, y + 28 * scale);
     ctx.lineTo(x + 8 * scale, y + 28 * scale);
-    ctx.fill();
+    ctx.fill(); }
+
+  function drawCapitol() {
+    drawRectangle((playerX - cameraX) * 32 + 4, (playerY - cameraY) * 32 + 4, 24, 24,
+      true, true, "rgba(169,169,169,0.35)", "rgba(0,0,0,0.5)");
+    drawRectangle((playerX - cameraX) * 32 + 10, (playerY - cameraY) * 32 + 10, 12, 12,
+      true, false, "rgba(0,0,0,0.8)");
   }
 
-  function drawMenu(x, y, width, height, func, menuID = 0) { //128, 64, 320, 32
+  function drawMenu(x, y, width, height, func = (() => {}), menuID = 0, 
+      strokeColor = "rgba(0,0,0,0.25)", strokeWidth = "3", hoverFunc = (() => {})) {
     height += 64 * (menuLogic[menuID].length - 1);
-    ctx.beginPath();
-    ctx.rect(x, y, width, height);
-    ctx.fillStyle = "rgba(0,0,0,0.05)";
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.lineWidth = "3";
-    ctx.fill();
-    ctx.stroke();
-
-    if (menuID != 0)
-    {
-      for (let i = 1; i < menuLogic[menuID].length; i++)
-      {
-        drawMenu(144, y - 32 + (64 * (i)), 288, 32, menuLogic[menuID][i]);
-        drawText(menuText[menuID][i], 164, y - 8 + (64 * (i)), "24px Arial", "lightgray", true);
-      }
+    if (contains(x, y, width, height, cursorX, cursorY)) {
+      if (menuID == 0) { clickLock = true; }
+      strokeColor = "rgba(255,255,255,1)";
+      strokeWidth = "5";
+      { (clickEnd != 0) ? func() : hoverFunc(); }
     }
-    else if (contains(x, y, width, height, cursorX, cursorY))
-    {
-      clickLock = true;
-      ctx.beginPath();
-      ctx.rect(x, y, width, height);
-      ctx.strokeStyle = "rgba(255,255,255,1)";
-      ctx.lineWidth = "5";
-      ctx.stroke();
+    drawRectangle(x, y, width, height, true, true, "rgba(0,0,0,0.05)", strokeColor);
 
-      if (clickEnd != 0)
-      {
-        func();
-      }
-    }
-  }
+    if (menuID != 0) {
+      if (menuID == 7) { hoverFunc = (() => { drawMenu(cursorX + 25, cursorY + 25, 300, 100); }); }
+      for (let i = 1; i < menuLogic[menuID].length; i++) {
+        drawMenu(x + 16, y - 32 + (64 * (i)), 288, 32, menuLogic[menuID][i], 0, "rgba(0,0,0,0.25)", "3", hoverFunc);
+        drawText(menuText[menuID][i], x + 32, y - 8 + (64 * (i)), "24px Arial", "lightgray", true); }}}
 
-  function drawObj()
-  {
-    ctx.beginPath();
-    ctx.rect((playerX - cameraX) * 32 + 4, (playerY - cameraY) * 32 + 4, 24, 24);
-    ctx.fillStyle = "rgba(169,169,169,0.35)";
-    ctx.strokeStyle = "rgba(0,0,0,0.5)";
-    ctx.lineWidth = "3";
-    ctx.fill();
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.fillStyle = "rgba(0,0,0,0.8)";
-    ctx.rect((playerX - cameraX) * 32 + 10, (playerY - cameraY) * 32 + 10, 12, 12)
-    ctx.fill();
+  function drawObj() {
+    drawCapitol();
 
-    units.forEach( (unit, key, map) => {
-      drawText(key.x + key.y, 100, 100, "24px Arial", "gold");
-      drawUnit((key.x - cameraX) * 32, (key.y - cameraY) * 32, 1, unit);
-    });
-  }
+    // draw all standing armies //
+    let key = [ ...armies.keys() ];
+    let army = [ ...armies.values() ];
+    for (i = 0; i < key.length; i++) {
+      let location = sliceXYZ(key[i]);
+      drawArmy((location.x - cameraX) * 32 + army[i].tileX, (location.y - cameraY) * 32
+        + army[i].tileY, 1, army[i].color); }}
 
-  function drawUI()
-  {
-    let rectangle;
+  function drawUI() {
+    let rect;
+    let font;
+    let color;
     let x;
     let y;
+    let key = padXYZ(playerX, playerY, 0);
+    let region = regions.get(key);
 
     if (buildHouse) {
-      drawHouse(cursorMapX * 32, cursorMapY * 32, 1, "rgba(69,69,69,0.7)", true);
-    }
+      drawHouse(cursorMapX * 32, cursorMapY * 32, 1, "rgba(69,69,69,0.7)", true); }
 
-    ctx.font = "30px Arial";
-    ctx.fillStyle = "black";
-    ctx.fillText(cursorMapX, 8, 28);
-    ctx.font = "30px Arial";
-    ctx.fillStyle = "black";
-    ctx.fillText(cursorMapY, 8 + 32, 28);
-    ctx.font = "30px Arial";
-    ctx.fillStyle = "gold";
-    ctx.fillText(playerGold, 8 + 128, 28);
-    ctx.font = "30px Arial";
-    ctx.fillStyle = "silver";
-    ctx.fillText(playerSilver, 8 + 192, 28);
-    ctx.font = "30px Arial";
-    ctx.fillStyle = "black";
-    ctx.fillText(fps, 8, 28 + 50);
+    // draw toolbar at top of screen //
+    font = "30px Arial";
+    drawText(cameraX, 8, 28, font);
+    drawText(cameraY, 8 + 32, 28, font);
+    drawText(playerGold, 8 + 128, 28, font, "gold");
+    drawText(playerSilver, 8 + 192, 28, font, "silver");
+    drawText(fps, 8, 28 + 32, font);
 
     // info menu button
     rect = [32, 64, 64, 64];
@@ -690,110 +921,134 @@
     ctx.font = "60px Arial";
     ctx.fillStyle = "rgba(0,0,0,0.7)";
     ctx.fillText("i", 57, 118);
-    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
-    {
-      activeMenu = (activeMenu == 0) ? 1 : 0;
-    }
+    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY)) {
+      activeMenu = (activeMenu == 0) ? 1 : 0; }
 
     // home menu button
     rect = [32, 160, 64, 64];
     drawMenu(rect[0], rect[1], rect[2], rect[3], menuLogic[2][0]);
     drawHouse(rect[0], rect[1], 2, "rgba(69,69,69,0.7)", true);
-    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
-    {
-      activeMenu = (activeMenu == 0) ? 2 : 0;
-    }
+    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY)) {
+      activeMenu = (activeMenu == 0) ? 2 : 0; }
 
-    // unit menu button
+    // army menu button
     rect = [32, 256, 64, 64];
     drawMenu(rect[0], rect[1], rect[2], rect[3], menuLogic[3][0]);
-    drawUnit(rect[0], rect[1], 2, "rgba(0,0,200,.5)")
-    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
-    {
-      activeMenu = (activeMenu == 0) ? 3 : 0;
-    }
+    drawArmy(rect[0], rect[1], 2, "rgba(0,0,200,.5)")
+    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY)) {
+      activeMenu = (activeMenu == 0) ? 3 : 0; }
 
     // lovely button
     rect = [32, 352, 64, 64];
     drawMenu(rect[0], rect[1], rect[2], rect[3], menuLogic[4][0]);
-    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY))
-    {
-      activeMenu = (activeMenu == 0) ? 4 : 0;
-    }
+    if (clickEnd != 0 && contains(rect[0], rect[1], rect[2], rect[3], cursorX, cursorY)) {
+      activeMenu = (activeMenu == 0) ? 4 : 0; }
 
+    // set menu size for tooltip menu //
     let width = 320;
     let height = 224;
-    if (tileSelectX != 0 && tileSelectY != 0)
-    {
+    if (tileSelectX != 0 && tileSelectY != 0) {
       x = tileSelectX;
       y = tileSelectY;
       if (![0,1,2,3].includes(tiles[x][y])) {
-        height = 448; }
-    }
+        height = 448; } }
     else {
       x = cameraX + cursorMapX;
-      y = cameraY + cursorMapY;
-    }
-    ctx.beginPath();
-    ctx.rect(1568, 32, width, height);
-    ctx.fillStyle = "rgba(0,0,0,0.05)";
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.lineWidth = "3";
-    ctx.fill();
-    ctx.stroke();
-    ctx.font = "40px Arial";
-    ctx.fillStyle = "rgba(0,0,0,0.7)";
-    ctx.fillText(biomeNames[map[x][y]], 1600, 100);
-    ctx.font = "40px Arial";
-    ctx.fillStyle = "rgba(0,0,0,0.7)";
-    ctx.fillText(tileNames[tiles[x][y]], 1600, 150);
-    ctx.font = "40px Arial";
-    ctx.fillStyle = "rgba(0,0,0,0.7)";
-    ctx.fillText("Owned: " + ((!tileOwned[x][y]) ? false : true), 1600, 200);
+      y = cameraY + cursorMapY; }
 
-    if (![0,1,2,3].includes(tiles[x][y]))
-    {
-      ctx.font = "40px Arial";
-      ctx.fillStyle = "rgba(0,0,0,0.7)";
-      ctx.fillText("Level: " + tileLevel[x][y], 1600, 250);
-      ctx.font = "40px Arial";
-      ctx.fillStyle = "rgba(0,0,0,0.7)";
-      ctx.fillText("Action: " + tileAction[x][y], 1600, 300);
-      ctx.font = "40px Arial";
-      ctx.fillStyle = "rgba(0,0,0,0.7)";
-      ctx.fillText("Pay In: " + Math.ceil((tileCompleted[x][y] - Date.now()) / 1000), 1600, 350);
-      drawMenu(1600, 416, 112, 32, () => {});
-      drawMenu(1744, 416, 112, 32, () => {});
-    }
+    // draw tooltip menu //
+    drawRectangle(1568, 32, width, height, true, true, "rgba(0,0,0,0.05)", "rgba(0,0,0,0.25)");
+    font = "40px Arial";
+    color = "rgba(0,0,0,0.7)";
+    drawText(biomeNames[map[x][y]], 1600, 100, font, color);
+    drawText(tileNames[tiles[x][y]], 1600, 150, font, color);
+    drawText("Owned: " + ((!tileOwned[x][y]) ? false : true), 1600, 200, font, color);
+    // if tile has logic, draw expanded tooltip menu elements //
+    if (![0,1,2,3,4].includes(tiles[x][y])) {
+      drawText("Level: " + tileLevel[x][y], 1600, 250, font, color);
+      drawText("Action: " + tileAction[x][y], 1600, 300, font, color);
+      drawText("Pay In: " + Math.ceil((tileCompleted[x][y] - Date.now()) / 1000), 1600, 350, font, color);
+      drawMenu(1600, 416, 112, 32);
+      drawMenu(1744, 416, 112, 32); }
 
-    if (activeMenu != 0)
-    {
-      drawMenu(128, 64, 320, 32, menuLogic[0][0], activeMenu);
-    }
+    // if army is selected, draw underlying units info below tooltip menu //
+    if (selectedArmy) {
+      army = armies.get(selectedArmy);
+      drawMenu(1568, 32 + height + 32, width, 192);
+      drawArmy(1824, 32 + height + 32, 2, "rgba(0,0,200,.5)");
+      for (i = 0; i < army.units.length; i++) {
+        drawText("Unit " + i + ": " + army.units[i].stats, 
+          1568 + 24, 160 + height - 8 + (32 * (i)), "24px Arial", "lightgray", true); }}
 
-    clickEnd = 0;
+    // if main menu is active, draw from index with embedded menuLogic[] //
+    if (activeMenu != 0) {
+      drawMenu(128, 64, 320, 32, menuLogic[0][0], activeMenu); }
+
+    // if main menu child is active, draw with indexed logic //
+    if (activeSubMenu != 0) {
+      drawMenu(480, 64, 320, 32, menuLogic[0][0], activeSubMenu); }
+
+    // !!! INACTIVE !!! divert to new hoverFunc in drawMenu() //
+    if (planInfo != 0) {
+      drawMenu(832, 64, 128, 64); }
   }
 
-	function draw() {
+  // draw technology tree //
+  function drawTech() {
+    if (clickLock) { clickEnd = 0; } // spend click on first pass //
+    let x;
+    let y;
+    for (i = 0; i < 5; i++) {
+      for (ii = 0; ii < techs[i].length; ii++) {
+        x = 64 + (i * 192);
+        y = 64 + (ii * 96);
+
+        if (techs[i][ii].researched) {
+          drawMenu(x, y, 160, 64, () => {}, 0, "rgba(255,255,255,1)"); }
+        else if (techAvailable(techs[i][ii])) {
+          drawMenu(x, y, 160, 64, () => { techs[i][ii].researched = true; }, 0, "rgba(0,255,0,1)"); }
+        else {
+          drawMenu(x, y, 160, 64); }
+
+        drawText(techs[i][ii].name, x + 32, y - 8, "24px Arial", "lightgray", true); }}
+  }
+
+  // draw canvas elements //
+	async function draw() {
     clickLock = false;
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		drawMap();
     drawMod();
     drawObj();
-    drawUI(); }
+    if (showUI) { drawUI(); }
+    if (showTech) { drawTech(); }
+    
+    clickEnd = 0;
+  }
 
 	generateMap();
   generateLand();
 
-  document.addEventListener("keydown", keyDownHandler, false);
-  document.addEventListener("keyup", keyUpHandler, false);
   document.addEventListener("mousedown", mouseDownHandler, false);
   document.addEventListener("mouseup", mouseUpHandler, false);
+  
+
+  window.onload = init;
+  function init() {
+    if (window.Event) {
+    document.captureEvents(Event.MOUSEMOVE); }
+    document.onmousemove = getCursorXY; }
 
   function mouseDownHandler(e) {
     clickStart = Date.now();
 
-    if (activeMenu == 2) {
+    if (selectedArmy) {
+      let army = armies.get(selectedArmy);
+      let location = sliceXYZ(selectedArmy);
+      army.moveX = (cameraX + cursorMapX) - location.x;
+      army.moveY = (cameraY + cursorMapY) - location.y; }
+
+    if (buyLand) {
       let x = playerX;
       let y = playerY;
       do {
@@ -803,100 +1058,50 @@
       let xi = x;
       let yi = y;
       let direction = (tileOwned[xi + 1][yi]) ? 4 : 1;
-      if (playerGold >= 1 && contains((xi - cameraX) * 32, (yi - cameraY) * 32, 32, 32, cursorX, cursorY))
-      {
+      if (playerGold >= 1 && contains((xi - cameraX) * 32, (yi - cameraY) * 32, 32, 32, cursorX, cursorY)) {
         tileOwned[xi][yi] = true;
         playerGold--;
-        return;
-      }
+        return; }
 
       xi = xi + movement[0][direction];
       yi = yi + movement[1][direction];
 
       do {
-        if (playerGold >= 1 && contains((xi - cameraX) * 32, (yi - cameraY) * 32, 32, 32, cursorX, cursorY))
-        {
+        if (playerGold >= 1 && contains((xi - cameraX) * 32, (yi - cameraY) * 32, 32, 32, cursorX, cursorY)) {
           tileOwned[xi][yi] = true;
           playerGold--;
-          return;
-        }
+          return; }
 
         direction = loop(direction + 1, 1, 4);
-
         if (tileOwned[xi + movement[0][direction]][yi + movement[1][direction]]) {
           do {
             direction = loop(direction - 1, 1, 4);
-          } while (tileOwned[xi + movement[0][direction]][yi + movement[1][direction]]);
-        }
+          } while (tileOwned[xi + movement[0][direction]][yi + movement[1][direction]]); }
 
         xi = xi + movement[0][direction];
         yi = yi + movement[1][direction];
 
         if (xi == x && yi == y) { return; }
-      } while (true);
-    }
-  }
+      } while (true); }}
 
   function mouseUpHandler(e) {
-    if (clickStart != 0)
-    {
+    if (clickStart != 0) {
       clickEnd = Date.now() - clickStart;
-      clickStart = 0;
-    }
+      clickStart = 0; }
 
-    if (cameraX + cursorMapX == tileSelectX && cameraY + cursorMapY == tileSelectY)
-    {
+    if (cameraX + cursorMapX == tileSelectX && cameraY + cursorMapY == tileSelectY) {
       tileSelectX = 0;
-      tileSelectY = 0;
-    }
+      tileSelectY = 0; }
     else if (!clickLock) {
       tileSelectX = cameraX + cursorMapX;
-      tileSelectY = cameraY + cursorMapY;
-    }
-  }
-
-  function keyDownHandler(e) {
-      if(e.key == "d") {
-          rightPressed = true; }
-      if(e.key == "s") {
-          downPressed = true; }
-      if(e.key == "a") {
-          leftPressed = true; }
-      if(e.key == "w") {
-          upPressed = true; }
-      if (e.key == "Escape"){
-        activeMenu = 0;
-        buildHouse = false;
-        buyLand = false;
-        tileIndex = false;
-        tileSelectX = 0;
-        tileSelectY = 0; }}
-
-  function keyUpHandler(e) {
-      if(e.key == "d") {
-          rightPressed = false; }
-      if(e.key == "s") {
-          downPressed = false; }
-      if(e.key == "a") {
-          leftPressed = false; }
-      if(e.key == "w") {
-          upPressed = false; }}
-
-  window.onload = init;
-  function init() {
-    if (window.Event) {
-    document.captureEvents(Event.MOUSEMOVE);
-    }
-    document.onmousemove = getCursorXY;
-  }
+      tileSelectY = cameraY + cursorMapY; }}
 
   function getCursorXY(e) {
     let rect = canvas.getBoundingClientRect();
     cursorX = (event.clientX - rect.left) / (rect.right - rect.left) * canvas.width;
     cursorY = (event.clientY - rect.top) / (rect.bottom - rect.top) * canvas.height;
     cursorMapX = Math.floor(cursorX / 32);
-    cursorMapY = Math.floor(cursorY / 32);
-  }
+    cursorMapY = Math.floor(cursorY / 32); }
 
   const times = [];
   let fps;
@@ -905,13 +1110,10 @@
     window.requestAnimationFrame(() => {
       const now = performance.now();
       while (times.length > 0 && times[0] <= now - 1000) {
-        times.shift();
-      }
+        times.shift(); }
       times.push(now);
       fps = times.length;
-      refreshLoop();
-    });
-  }
+      refreshLoop(); }); }
 
   // uploadData();
 

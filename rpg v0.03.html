@@ -71,12 +71,13 @@
   // Property is an advanced and detailed piece of land (32x32 square)
   // Will replace BUILDING (or build on top)
   class Property {
-	  constructor(id, terrain = [[]], objects = new Map(), capitol = null, production = 0) {
-      this.id = id; // Draw/Structure ID
+	  constructor(type, terrain = [[]], objects = new Map(), capitol = null, production = 0) {
+      this.type = type; // Draw/Structure ID
       this.terrain = terrain; // X&Y array of 32x32
       this.objects = objects; // Populated tiles
       this.capitol = capitol; // Logical parent tile
-      this.production = production; } // multiplier?
+      this.production = production; // multiplier?
+      this.units = new Map(); }
     calcProduction(skill) {
       let list = [ ...this.units.values() ];
       this.production = list.reduce((prod, ssn) =>
@@ -84,11 +85,12 @@
   }
 
   // Contracts alpha
-  // Default no expiration
+  // Default no expiration and always active (24/7)
   class Contract {
-	  constructor(period, exp = 0) {
+	  constructor(period, exp = 0, active = 0) {
       this.period = period;
-      this.expiration = exp; }
+      this.expiration = exp;
+      this.active = active; }
   }
 
   class Building {
@@ -111,7 +113,7 @@
       this.work = null;
       this.skills = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
       this.equipment = [];
-      this.events = []; }}
+      this.events = []; }} // currently list of events, eventually event tree
 
   /// Class to convert Stats array into object
   /// 0: Level (LVL) = 1 + Stats 10-30
@@ -145,6 +147,7 @@
       this.color = color;
       this.units = new Map();
       this.level = level;
+      this.production = 0;
       this.health = 0;
       this.attack = 0;
       this.defense = 0;
@@ -157,7 +160,12 @@
       
       setStats() {
 
-      }}
+      }
+      calcProduction(skill) {
+        let list = [ ...this.units.keys() ];
+        this.production = list.reduce((prod, ssn) =>
+          prod + (Math.floor(units[ssn].skills[skill] / 10) + 1), 0) / list.length; }
+    }
 
   class Region { // resources = [0, food, currency, culture, lumber, stone, 0, 0, 0, 0]
     constructor(domain = [], resources = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) {
@@ -186,6 +194,17 @@
   let biomeNames = ["Grassland", "Snowy Region", "Desert"];
   let tileDraws = ['black', 'black', 'darkblue', '#808000', "rgba(150,150,150,1)", "rgba(69,69,69,1)", "rgba(69,69,69,1)"];
   let tileNames = ["Zero", "Fill", "Water", "Forest", "Mountain", "House", "Building", "Mine", "Lumber Mill"];
+  let eventIndex = ["It's been a long day.",
+    "Today was a good day.",
+    "I met someone nice today.",
+    "I'm late for work!",
+    "I'm bored.",
+    "I need a vacation.",
+    "I'm in love.",
+    "I love my job.",
+    "I need a new job.",
+    "I'm exhausted."
+  ] // eventually replace with event generator and event trees
 
   let tileIndex = false; // render tile layer index for testing
   let infoMenu = false;
@@ -206,8 +225,9 @@
   let playerIncomeS = 0;
  // let GDP = 100000; // denominated in copper pieces, G:Cx10000
   let playerBank = [1000,0,0,0,0]; // $C, Wood, Stone,
-  let tileSelectX = 0;
-  let tileSelectY = 0;
+  let selectedTileX = 0;
+  let selectedTileY = 0;
+  let selectedUnit = null;
   let selectedArmy = null;
   let selectedBuilding = null;
   let keyMap = {};
@@ -223,8 +243,6 @@
 	let map = [];
 	let tiles = [];
   let tileOwned = [];
-  let tileAction = [];
-  let tileCompleted = [];
   let tileLevel = [];
   let activeMenu = 0;
   let activeSubMenu = 0;
@@ -257,9 +275,10 @@
       "Stone Pick", "Stone Axe", "Stone Sword", "Stone Spear", "Stone Shield"],
     ["Btn", "House", "Lumbermill", "Mine", "Castle"],
     ["Btn"],
-    ["Btn", "Zero", "Water", "Forest", "Mountain", "House", "Building", "Mine", "Lumber Mill"]];
+    ["Btn", "Zero", "Water", "Forest", "Mountain", "House", "Building", "Mine", "Lumber Mill"],
+    ["Btn", "Deploy"]];
 
-  let menuLogic = [[],[],[],[],[],[],[],[],[]];
+  let menuLogic = [[],[],[],[],[],[],[],[],[],[]];
   menuLogic[0][0] = () => {};
 
   menuLogic[1][0] = () => {}; // info menu main button function
@@ -279,9 +298,9 @@
   menuLogic[2][2] = () => {
     buyLand = !buyLand; };
   menuLogic[2][3] = () => {
-    if (playerBank[0] >= 100 * tileLevel[tileSelectX][tileSelectY]) {
-      playerBank[0] -= 100 * tileLevel[tileSelectX][tileSelectY];
-      tileLevel[tileSelectX][tileSelectY]++; }};
+    if (playerBank[0] >= 100 * tileLevel[selectedTileX][selectedTileY]) {
+      playerBank[0] -= 100 * tileLevel[selectedTileX][selectedTileY];
+      tileLevel[selectedTileX][selectedTileY]++; }};
   menuLogic[2].push(() => {});
   menuLogic[2].push(() => {});
 
@@ -291,7 +310,7 @@
   menuLogic[3][2] = () => {
     let x = rnd(fieldX) + cameraX;
     let y = rnd(fieldY) + cameraY;
-    createArmy(x, y, [createUnit(new GPS(0, 0, 0), true)]) };
+    createArmy(x, y, [createUnit(new GPS(0, 0, 0), true)]); };
     
   menuLogic[4][0] = () => {
     playerBank[0] += 100; }; // lovely button function
@@ -326,6 +345,11 @@
   menuLogic[8][7] = () => { buildLand = 7; };
   menuLogic[8][8] = () => { buildLand = 8; };
 
+  menuLogic[9][0] = () => {}; // unit screen
+  menuLogic[9][1] = () => {
+    assignUnit();
+  };
+
   let units = [];
   // !!! // IMPORTANT NOTE // TEMPORARY FIX // !!! //
   // army keys are handled by converting to and from STRING manually //
@@ -348,6 +372,7 @@
     regions.set(key, newRegion);
   }
   let buildings = new Map();
+  let properties = new Map();
 	let ID = [];
   let movement = [[0, 1, 0, -1, 0], [0, 0, 1, 0, -1]];
   let movementFull = [[0, 1, 1, 0, -1, -1, -1, 0, 1], [0, 0, 1, 1, 1, 0, -1, -1, -1]];
@@ -463,7 +488,10 @@
   // This may require reverting this function to a true/false //
   // I liked adjusting value to edges of boundaries, but I give up on this //
   // This is one more beyond baffling and frustrating struggle with JavaScript //
-  function range(num, min, max) {
+  function range(num, min = 0, max = 999) {
+    return ((num > max) ? max : ((num < min) ? min : num)); }
+
+  function range2(num, min = 0, max = 999) {
     return ((num > max) ? max : ((num < min) ? min : num)); }
 
   // inRange() returns true if num is within min && max //
@@ -495,13 +523,30 @@
     menuLogic[7].push(() => { clearUI(); selectTile(unit.home.x, unit.home.y); });
     if (r) return unit; }
 
-  function createArmy(x, y, units = 0) {
+  function assignUnit(tile = new GPS(selectedTileX, selectedTileY, 0),
+      unit = units[selectedUnit]) {
+    let key = padXYZ(tile.x, tile.y, 0);
+    let building = buildings.get(key);
+    if (building && building.units.size < 4 && !unit.work) {
+      unit.work = gps;
+      unit.events.push("I'm employed at the " + tileNames[tiles[tile.x][tile.y]] + "!")
+      building.units.set(selectedUnit, new Contract(Date.now() + 30000));
+      building.calcProduction(0); }
+    else if (!building && !unit.work) {
+      (armies.get(key)) ? armies.get(key).units.set(unit.ssn, unit)
+        : createArmy(tile.x, tile.y, [unit], true);
+      armies.get(key).calcProduction(0);
+      unit.work = true; }
+  }
+
+  function createArmy(x, y, units = 0, r = false) {
     let army = new Army(0, 0, "blue", 10);
     let key = padXYZ(x, y, 0);
     if (units != 0) {
       for (let i = 0; i < units.length; i++) {
         army.units.set(units[i].ssn, units[i]); }
-    armies.set(key, army); }}
+    armies.set(key, army); }
+    if (r) { return army; }}
 
 /*
   function setResources(region) {
@@ -556,8 +601,6 @@
           map[x] = [];
           tiles[x] = [];
           tileOwned[x] = [];
-          tileAction[x] = [];
-          tileCompleted[x] = [];
           tileLevel[x] = []; }
 				map[x][y] = 0;
 				tiles[x][y] = 0; }}
@@ -724,7 +767,7 @@
     e = e || event; // IE Compatibility
     keyMap[e.keyCode] = e.type == 'keydown'; }
 
-  function ai(army, location) {
+  function moveTo(army, location) {
     let moveX = (army.moveX != 0) ? (army.moveX / (Math.abs(army.moveX))) : -(army.tileX / (Math.abs(army.tileX)));
     let moveY = (army.moveY != 0) ? (army.moveY / (Math.abs(army.moveY))) : -(army.tileY / (Math.abs(army.tileY)));
     if ((army.moveX != 0 || army.tileX != 0)
@@ -750,6 +793,15 @@
       }
     }
   }
+  
+  function patrol(key, x = 50, y = 50, range = 25) {
+    let army = armies.get(key);
+    let location = sliceXYZ(key);
+    let rndX = rnd(range * 2) - range;
+    let rndY = rnd(range * 2) - range;
+    army.moveX = x - location.x + rndX;
+    army.moveY = y - location.y + rndY;
+  }
 
   function logic() {
     if (nextPage) { menuPage++; nextPage = false; }
@@ -770,10 +822,13 @@
     let army = [ ...armies.values() ];
     for (i = 0; i < key.length; i++){
       let location = sliceXYZ(key[i]);
-      if (tileSelectX == location.x && tileSelectY == location.y) {
-        selectedArmy = key[i];
-      }
-      ai(army[i], location);
+      if (selectedTileX == location.x && selectedTileY == location.y) {
+        selectedArmy = key[i]; }
+      if (army[i].moveX != 0 || army[i].moveY != 0
+          || army[i].tileX != 0 || army[i].tileY != 0) {
+        moveTo(army[i], location); }
+      else if (army[i].action == 1) {
+        patrol(key[i]); }
     }
 
     if (buildLand != 0)
@@ -786,9 +841,7 @@
         if (clickEnd != 0 && playerBank[0] >= 250 && tileOwned[x][y]
           && tiles[x][y] == 0) {
           tiles[x][y] = buildLand;
-          if (buildLand == 5) {
-            tileAction[x][y] = 1;
-            tileCompleted[x][y] = Date.now() + 10000;
+          if (buildLand >= 5) {
             tileLevel[x][y] = 1;
             buildings.set(new GPS(x, y, 0).toString(), new Building(buildings.length));
             playerBank[0] -= 250;
@@ -805,40 +858,48 @@
       let location = sliceXYZ(key[i]);
       let gps = new GPS(location.x, location.y, 0);
       let contract = [ ...building[i].units.values() ];
-      if (contract.length > 0) { settleContracts(building[i], contract); }
+      if (contract.length > 0) { settleContracts(gps, building[i], contract); }
 
-      if (rnd(50) == 5 && building[i].units.size <= 4) {
+      if (tiles[gps.x][gps.y] == 5 && rnd(50) >= 5 && building[i].units.size < 4) {
         let unit = createUnit(gps, true);
-      building[i].units.set(unit.ssn, new Contract(Date.now() + 30000));
-      building[i].calcProduction(0); }}
+        unit.events.push("I now live at " + location + "!")
+        building[i].units.set(unit.ssn, new Contract(Date.now() + 30000));
+        building[i].calcProduction(0); }}
 
     /*for (y = 0; y <= mapHeight; y++) {
       for (x = 0; x <= mapWidth; x++) {
         if (tileOwned[x][y]) {
-          if (tileAction[x][y] != 0) {
-            if (tileCompleted[x][y] <= Date.now()) {
               let tile = tiles[x][y];
               if (Number.isInteger(tile) && tile == 5) {
-                tileCompleted[x][y] = Date.now() + 10000;
-                playerGold += tileLevel[x][y] * 10; }}}}
+                playerGold += tileLevel[x][y] * 10; }}
       }
     }*/
   }
 
-  function settleContracts(property, contracts) {
+  function logic5000() {
+    let list = units;
+    for (const unit of list) {
+      if (rnd(100) == 50) {
+        unit.events.push(eventIndex[rnd(10)]);
+      }
+    }
+  }
+
+  function settleContracts(gps, property, contracts) {
     for(const contract of contracts) {
       if (contract.period < Date.now()) {
-        payContract(property);
+        payContract(gps, property);
         contract.period = Date.now() + 30000; }
     }
   }
 
-  function payContract(property) {
-    if (property.id == 5) {
+  function payContract(gps, property) {
+    let index = tiles[gps.x][gps.y];
+    if (index == 5) {
       playerBank[0] += 10 * property.production; }
-    else if (property.id == 7) {
+    else if (index == 7) {
       playerBank[2] += 1 * property.production; }
-    else if (property.id == 8) {
+    else if (index == 8) {
       playerBank[1] += 1 * property.production; }
   }
 
@@ -858,8 +919,8 @@
 			  biomeDraws[land], outlineColor, "1"); }}
 
     // draw selected tile || tile @ cursor position //
-    let rect = (tileSelectX != 0 && tileSelectY != 0) 
-      ? [(tileSelectX - cameraX) * 32, (tileSelectY - cameraY) * 32, 32, 32] 
+    let rect = (selectedTileX != 0 && selectedTileY != 0) 
+      ? [(selectedTileX - cameraX) * 32, (selectedTileY - cameraY) * 32, 32, 32] 
       : [cursorMapX * 32, cursorMapY * 32, 32, 32];
     drawRectangle(rect[0], rect[1], rect[2], rect[3], false, true, "black", "darkgray");
 
@@ -1019,7 +1080,7 @@
     let menuLength = (length <= 8) ? length : 9;
     height += 64 * (menuLength - 1);
     if (contains(x, y, width, height, cursorX, cursorY)) {
-      if (menuID == 0) { clickLock = true; }
+      clickLock = true;
       strokeColor = "rgba(255,255,255,1)";
       strokeWidth = "5";
       { (clickEnd != 0) ? func() : hoverFunc(); }
@@ -1036,12 +1097,17 @@
         drawMenu(x + 16, y - 32 + (64 * (i - overflow)), 288, 32, menuLogic[menuID][i], 0, "rgba(0,0,0,0.25)", "3", hoverFunc);
         drawText(menuText[menuID][i], x + 32, y - 8 + (64 * (i - overflow)), "24px Arial", "lightgray", true); }}}
         // CURRENTLY CLICK TO CHANGE PAGE, NEED BUTTON FOR OVERFLOW MENUS
+
   function drawTileUnits(tile, height, width) {
     drawMenu((fieldX - 11) * 32, 32 + height + 32, width, 192);
-      drawText("Production: " + (tile.units.size * tile.production), (fieldX - 10) * 32, height + 96, "30px Arial", "White");
-      drawArmy((fieldX - 3) * 32, 32 + height + 32, 2, "rgba(0,0,200,.5)");
+    drawText("Production: " + (tile.action), (fieldX - 10) * 32, height + 96, "30px Arial", "White");
+    let func = (tile instanceof Army) ? () => { armies.get(selectedArmy).action = 1; } : () => {};
+    drawMenu((fieldX - 3) * 32, 32 + height + 32, 64, 64, func);
+    drawArmy((fieldX - 3) * 32, 32 + height + 32, 2, "rgba(0,0,200,.5)");
 	  let ssns = [ ...tile.units.keys() ];
       for (i = 0; i < ssns.length; i++) {
+        drawMenu((fieldX - 11) * 32, 128 + height + (32 * (i)), width, 32,
+          () => { selectedUnit = ssns[i]; });
         drawText(units[ssns[i]].name + ": " + units[ssns[i]].stats, 
           (fieldX - 11) * 32 + 24, 160 + height - 8 + (32 * (i)), "24px Arial", "lightgray", true); }}
 
@@ -1082,6 +1148,8 @@
     drawText(cameraX, 8, 28, font);
     drawText(cameraY, 8 + 54, 28, font);
     drawText(playerBank[0] / 100, 8 + 112, 28, font, "silver");
+    drawText("Lumber: " + playerBank[1], 8 + 112, 28 + 32, font, "brown");
+    drawText("Stone: " + playerBank[2], 8 + 112, 28 + 64, font, "gray");
     drawText(fieldX, 8 + 176, 28, font);
     drawText(fieldY, 8 + 230, 28, font);
     /*drawText(priv, 8 + 192, 28, font, "silver");
@@ -1131,9 +1199,9 @@
     // set menu size for tooltip menu //
     let width = 320;
     let height = 224;
-    if (tileSelectX != 0 && tileSelectY != 0) {
-      x = tileSelectX;
-      y = tileSelectY;
+    if (selectedTileX != 0 && selectedTileY != 0) {
+      x = selectedTileX;
+      y = selectedTileY;
       if (![0,1,2,3].includes(tiles[x][y])) {
         height = 448; } }
     else {
@@ -1150,8 +1218,8 @@
     // if tile has logic, draw expanded tooltip menu elements //
     if (![0,1,2,3,4].includes(tiles[x][y])) {
       drawText("Level: " + tileLevel[x][y], (fieldX - 10) * 32, 250, font, color);
-      drawText("Action: " + tileAction[x][y], (fieldX - 10) * 32, 300, font, color);
-      drawText("Pay In: " + Math.ceil((tileCompleted[x][y] - Date.now()) / 1000), (fieldX - 10) * 32, 350, font, color);
+      drawText("Action: ", (fieldX - 10) * 32, 300, font, color);
+      drawText("Pay In: ", (fieldX - 10) * 32, 350, font, color);
       drawMenu((fieldX - 10) * 32, 416, 112, 32);
       drawMenu((fieldX - 5.5) * 32, 416, 112, 32); }
 
@@ -1162,6 +1230,16 @@
     if (selectedBuilding) {
       building = buildings.get(selectedBuilding);
       drawTileUnits(building, height, width); }
+    if (selectedUnit && activeMenu == 0) {
+      let unit = units[selectedUnit];
+      let length = 32 * unit.events.length;
+      drawMenu(128, 64, 320, 96 + length, menuLogic[9][0], 9);
+      drawText("Stats: " + unit.stats, 128 + 16, 160);
+      drawText("Skills: " + unit.skills, 128 + 16, 192)
+      for (let i = 0; i < unit.events.length; i++) {
+        drawText(unit.events[i], 128+16, 224 + (32 * i));
+      }
+    }
 
     // if main menu is active, draw from index with embedded menuLogic[] //
     if (activeMenu != 0) {
@@ -1183,8 +1261,9 @@
     buildLand = 0;
     buyLand = false;
     tileIndex = false;
-    tileSelectX = 0;
-    tileSelectY = 0;
+    selectedTileX = 0;
+    selectedTileY = 0;
+    selectedUnit = null;
     selectedArmy = null;
     selectedBuilding = null;
     showUI = true;
@@ -1243,7 +1322,7 @@
   function mouseDownHandler(e) {
     clickStart = Date.now();
 
-    if (selectedArmy) {
+    if (selectedArmy && !clickLock) {
       let army = armies.get(selectedArmy);
       let location = sliceXYZ(selectedArmy);
       army.moveX = (cameraX + cursorMapX) - location.x;
@@ -1290,16 +1369,16 @@
       clickEnd = Date.now() - clickStart;
       clickStart = 0; }
 
-    if (cameraX + cursorMapX == tileSelectX && cameraY + cursorMapY == tileSelectY) {
-      tileSelectX = 0;
-      tileSelectY = 0;
+    if (cameraX + cursorMapX == selectedTileX && cameraY + cursorMapY == selectedTileY) {
+      selectedTileX = 0;
+      selectedTileY = 0;
       selectedBuilding = null; }
     else if (!clickLock) {
       selectTile(cameraX + cursorMapX, cameraY + cursorMapY); }}
 
   function selectTile(x, y) {
-    tileSelectX = x;
-    tileSelectY = y;
+    selectedTileX = x;
+    selectedTileY = y;
     let gps = new GPS(x, y, 0).toString();
     if (buildings.has(gps)) { selectedBuilding = gps; }}
 
@@ -1352,6 +1431,7 @@
   refreshLoop();
 	setInterval(logic, 20);
 	setInterval(logic1000, 1000);
+	setInterval(logic5000, 1000);
 	setInterval(draw, 20);
 </script>
 

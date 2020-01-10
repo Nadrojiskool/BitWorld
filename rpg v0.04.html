@@ -11,7 +11,7 @@
 </head>
 <body>
 
-<canvas id="myCanvas" width="1920" height="1080"></canvas>
+<canvas id="canvas" width="1920" height="1080"></canvas>
 
 <script src="https://unpkg.com/clientside-require/dist/bundle.js"></script>
 <script src="https://www.moneybutton.com/moneybutton.js"></script>
@@ -48,6 +48,16 @@
 
 <script>
 
+  // currently testing button events
+  // if condition(input) evaluates true, run action
+  class Element {
+    constructor(i, o) {
+      this.condition = i;
+      this.action = o; }
+    evaluate(input = 0) {
+      return this.condition(input); }
+  }
+
   class GPS {
     constructor(x, y, z) {
       this.x = x;
@@ -66,7 +76,7 @@
     return (getCoord(this.x, this.y, this.xx, this.yy)); }
 
   class Land {
-	  constructor(owner = padXYZ(50, 50, 0)) {
+	  constructor(owner = padXYZ(playerX, playerY, 0)) {
       this.owner = owner; }
   }
 
@@ -90,22 +100,24 @@
   // Default no expiration and always active (24/7)
   class Contract {
 	  constructor(promisor, promisee, period,
-        pay = [1, 0], payFrom = promisor, payTo = promisee,
-        exp = 0, active = 0) {
+        pay = [1, 0], interval = 0, exp = 0, active = 0, 
+        payFrom = promisor, payTo = promisee) {
       this.promisor = promisor;
       this.promisee = promisee;
       this.period = period;
       this.payment = new Payment(payFrom, payTo, pay[0], pay[1]);
+      this.interval = interval;
       this.expiration = exp;
       this.active = active; }
   }
 
   class Payment {
-    constructor(i, o, $, r) {
+    constructor(i, o, $, r, f = (()=>{})) {
       this.in = i;
       this.out = o;
       this.amount = $;
       this.resource = r;
+      this.settlement = f;
     }
   }
 
@@ -113,7 +125,8 @@
     constructor(id) {
       this.id = id;
       this.units = new Map(); // contracts mapped to ssn
-		  this.production = 0; }
+		  this.production = 0;
+      this.condition = 0; }
     calcProduction(skill) {
       let list = [ ...this.units.keys() ];
       this.production = list.reduce((prod, ssn) =>
@@ -129,7 +142,8 @@
       this.work = null;
       this.skills = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
       this.equipment = [];
-      this.events = []; }} // currently list of events, eventually event tree
+      this.events = []; // list of events
+      this.scenarios = new Map(); }} // progress by scenario index
 
   /// Class to convert Stats array into object
   /// 0: Level (LVL) = 1 + Stats 10-30
@@ -174,6 +188,9 @@
     }
   }
 
+  // Tasks:
+  // 01: Patrol
+  // 02: Gather Resource
 	class Army {
     units = [];
 	  constructor(tileX, tileY, color, level = 0) {
@@ -187,8 +204,8 @@
       this.attack = 0;
       this.defense = 0;
       this.speed = 0;
+      this.task = 0;
       this.action = 0;
-      this.timeCompleted = 0;
       this.direction = 0;
       this.moveX = 0;
       this.moveY = 0; }
@@ -200,10 +217,14 @@
         let list = [ ...this.units.keys() ];
         this.production = list.reduce((prod, ssn) =>
           prod + (Math.floor(units[ssn].skills[skill] / 10) + 1), 0) / list.length; }
+      setTask(task = 0, action = 0) {
+        this.task = task;
+        this.action = action; }
     }
 
   class Region { // resources = [0, food, currency, culture, lumber, stone, 0, 0, 0, 0]
-    constructor(domain = [], resources = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) {
+    constructor(lord, domain = [], resources = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) {
+      this.lord = lord;
       this.domain = domain;
       this.resources = resources; }
   }
@@ -221,11 +242,11 @@
   await moneyButtonClient.handleAuthorizationResponse();
   const { id: moneyButtonId } = await moneyButtonClient.getIdentity();*/
 
-	let canvas = document.getElementById("myCanvas");
+	let canvas = document.getElementById("canvas");
 	let ctx = canvas.getContext("2d");
-  canvas.offscreenCanvas = document.createElement('canvas');
-  canvas.offscreenCanvas.width = canvas.width;
-  canvas.offscreenCanvas.height = canvas.height;
+  //canvas.offscreenCanvas = document.createElement('canvas');
+  //canvas.offscreenCanvas.width = canvas.width;
+  //canvas.offscreenCanvas.height = canvas.height;
   let isMobile = (/Mobile/i.test(navigator.userAgent));
   let snd = new Audio("https://bico.media/150a366b2142fcab0c4a951884162a25bb50d1ee1188449769ddf966da27c11d");
 	snd.volume = 0.2;
@@ -310,6 +331,17 @@
     canvasImages[7].getContext("2d"),
     canvasImages[8].getContext("2d")
   ];
+  let microImages = [
+    document.createElement('canvas'),
+    document.createElement('canvas'),
+    document.createElement('canvas')
+  ];
+  microImages[0].width = 8;
+  microImages[0].height = 8;
+  microImages[1].width = 8;
+  microImages[1].height = 8;
+  microImages[2].width = 8;
+  microImages[2].height = 8;
   let tileNames = ["Zero", "Fill", "Water", "Forest", "Mountain", "House", "Building", "Mine", "Lumber Mill"];
   let mNames = ["John",	"William",	"Robert",	"James",	"Charles",	"George",	"Joseph",	"Edward",	"Frank",	"Richard",	"Thomas",	"Harold",	"Walter",	"Paul",	"Raymond",	"Donald",	"Henry",	"Arthur",	"Albert",	"Jack",	"Harry",	"Ralph",	"Kenneth",	"Howard",	"David",	"Clarence",	"Carl",	"Louis",	"Willie",	"Eugene",	"Earl",	"Roy",	"Fred",	"Francis",	"Joe",	"Lawrence",	"Ernest",	"Leonard",	"Warren",	"Stanley",	"Herbert",	"Alfred",	"Anthony",	"Samuel",	"Elmer",	"Bernard",	"Norman",	"Leo",	"Andrew",	"Michael",	"Russell",	"Daniel",	"Edwin",	"Melvin",	"Chester",	"Leroy",	"Peter",	"Lloyd",	"Clifford",	"Frederick",	"Floyd",	"Marvin",	"Theodore",	"Gerald",	"Vernon",	"Herman",	"Ray",	"Clyde",	"Lester",	"Charlie",	"Philip",	"Lewis",	"Vincent",	"Milton",	"Leon",	"Alvin",	"Cecil",	"Martin",	"Jesse",	"Glenn",	"Victor",	"Lee",	"Benjamin",	"Sam",	"Gordon",	"Wayne",	"Harvey",	"Willard",	"Edgar",	"Oscar",	"Arnold",	"Claude",	"Wallace",	"Allen",	"Everett",	"Stephen",	"Gilbert",	"Wilbur",	"Johnnie",	"Homer",	"Virgil",	"Maurice",	"Roger",	"Eddie",	"Dale",	"Douglas",	"Sidney",	"Morris",	"Marion",	"Leslie",	"Jessie",	"Max",	"Hubert",	"Roland",	"Hugh",	"Irving",	"Alexander",	"Manuel",	"Franklin",	"Curtis",	"Bill",	"Glen",	"Luther",	"Nicholas",	"Julius",	"Jerome",	"Steve",	"Horace",	"Wesley",	"Jose",	"Tom",	"Billy",	"Willis",	"Orville",	"Oliver",	"Tony",	"Ben",	"Edmund",	"Calvin",	"Earnest",	"Mike",	"Alex",	"Jacob",	"Jerry",	"Archie",	"Otis",	"Jimmie",	"Don",	"Bruce",	"Delbert",	"Lyle",	"Matthew",	"Clayton",	"Guy",	"Angelo",	"Clifton",	"Salvatore",	"Clinton",	"Patrick",	"Wilbert",	"Bennie",	"Marshall",	"Ervin",	"Phillip",	"Jim",	"Nathaniel",	"Emil",	"Ronald",	"Rudolph",	"Ira",	"Merle",	"Nathan",	"Gene",	"Sylvester",	"Keith",	"Wilfred",	"Leland",	"Forrest",	"Ivan",	"Dean",	"Elbert",	"Irvin",	"Woodrow",	"Johnny",	"Dan",	"Lonnie",	"Nelson",	"Rufus",	"Bob",	"Antonio",	"Isaac",	"Johnie",	"Junior",	"Nick",	"Julian",	"Grover",	"Alton",	"Lowell",	"Aaron",	"Felix",	"Jay",	"Seymour",	"Abraham",	"Ellis",	"Pete",	"Otto",	"Dennis",	"Dewey",	"Emmett",	"Rex",	"August",	"Carroll",	"Juan",	"Roscoe",	"Grady",	"Percy",	"Owen",	"Bert",	"Mark",	"Elwood",	"Wilson",	"Loyd",	"Adam",	"Byron",	"Dominick",	"Fredrick",	"Malcolm",	"Laurence",	"Myron",	"Ross",	"Ted",	"Wendell",	"Perry",	"Dominic",	"Allan",	"Mack",	"Loren",	"Jesus",	"Murray",	"Billie",	"Adolph",	"Troy",	"Eldon",	"Norbert",	"Karl",	"Amos",	"Neil",	"Sherman",	"Charley",	"Harley",	"Preston",	"Aubrey",	"Austin",	"Reuben",	"Erwin",	"Boyd",	"Duane",	"Freddie",	"Wilmer",	"Carlton",	"Larry",	"Morton",	"Alan",	"Burton",	"Cornelius",	"Edmond",	"Carlos",	"Louie",	"Millard",	"Steven",	"Mitchell",	"Tommie",	"Dwight",	"Lynn",	"Gerard",	"Mario",	"Harrison",	"Garland",	"Elmo",	"Doyle",	"Elton",	"Grant",	"Russel",	"Jasper",	"Ramon",	"Moses",	"Kermit",	"Emanuel",	"Laverne",	"Maynard",	"Dave",	"Rocco",	"Neal",	"Will",	"Wade",	"Jake",	"Thurman",	"Francisco",	"Darrell",	"Monroe",	"Roosevelt",	"Cleveland",	"Solomon",	"Rodney",	"Cleo",	"Dallas",	"Earle",	"Joel",	"Tommy",	"Simon",	"Clair",	"Quentin",	"Odell",	"Ruben",	"Delmar",	"Irwin",	"Jess",	"Elvin",	"Harlan",	"Alphonse",	"Dick",	"Stuart",	"Armand",	"Weldon",	"Jimmy",	"Marcus",	"Andy",	"Merlin",	"Gus",	"Claud",	"Ed",	"Alonzo",	"Clark",	"Clement",	"Emory",	"Conrad",	"Thaddeus",	"Orval",	"Christopher",	"Randolph",	"Bruno",	"Carmen",	"Forest",	"Ollie",	"Merrill",	"Patsy",	"Ward",	"Adrian",	"Alfonso",	"Ned",	"Emery",	"Pedro",	"Alva",	"Buford",	"Cyril",	"Elijah",	"Jean",	"Vito",	"Reginald",	"Vern",	"Hollis",	"Benny",	"Lionel",	"Stewart",	"Hyman",	"Timothy",	"Wilburn",	"Sammie",	"Barney",	"Wiley",	"Truman",	"Anton",	"Emerson",	"Sterling",	"Levi",	"Eli",	"Mervin",	"Wilford",	"Roman",	"Sol",	"Ellsworth",	"Herschel",	"Basil",	"Noah",	"Coy",	"Travis",	"Teddy",	"Lavern",	"Jackson",	"Miles",	"Harding",	"Milford",	"Spencer",	"Norris",	"Winfred",	"Harris",	"Hiram",	"Silas",	"Milo",	"Van",	"Luis",	"Sanford",	"Carmine",	"Rolland",	"Winston",	"Ambrose",	"Pasquale",	"Abe",	"Buster",	"Jeff",	"Mathew",	"Vance",	"Casimir",	"Noel",	"Saul",	"Pat",	"Salvador",	"Foster",	"Freeman",	"Gabriel",	"Lenard",	"Bertram",	"Royal",	"Sheldon",	"Dudley",	"Isadore",	"Noble",	"Shirley",	"Booker",	"Mary",	"Aloysius",	"Hershel",	"Odis",	"Frederic",	"Hal",	"Scott",	"Denver",	"Lorenzo",	"Newton",	"Omer",	"Ulysses",	"Delmer",	"Olin",	"Bud",	"Eric",	"Ferdinand",	"Lamar",	"Lyman",	"Orlando",	"Alden",	"Anderson",	"Chris",	"Elliott",	"Gregory",	"Raul",	"Sydney",	"Gale",	"Guadalupe",	"Burl",	"Darwin",	"Houston",	"Micheal",	"Cletus",	"Royce",	"Marlin",	"Gail",	"Randall",	"Bobby",	"Major",	"Elias",	"Hobert",	"Luke",	"Riley",	"Augustus",	"Everette",	"Hoyt",	"Olen",	"Armando",	"Hugo",	"Linwood",	"Morgan",	"Evan",	"Warner",	"Wilton",	"Arlie",	"Nolan",	"Rupert",	"Jefferson",	"Dewitt",	"Junius",	"Walker",	"Wilber",	"Al",	"Merton",	"Waldo",	"Mckinley",	"Roberto",	"Clay",	"Lemuel",	"Shelby"];
   let fNames = ["Mary",	"Dorothy",	"Helen",	"Margaret",	"Ruth",	"Mildred",	"Virginia",	"Elizabeth",	"Frances",	"Anna",	"Betty",	"Evelyn",	"Marie",	"Doris",	"Alice",	"Florence",	"Irene",	"Lillian",	"Louise",	"Rose",	"Catherine",	"Gladys",	"Martha",	"Marjorie",	"Eleanor",	"Ruby",	"Edna",	"Josephine",	"Lucille",	"Ethel",	"Thelma",	"Edith",	"Jean",	"Hazel",	"Annie",	"Pauline",	"Grace",	"Lois",	"Esther",	"Bernice",	"Beatrice",	"Gertrude",	"Marion",	"Clara",	"Katherine",	"Emma",	"Barbara",	"Jane",	"Ann",	"Sarah",	"Elsie",	"Rita",	"June",	"Agnes",	"Julia",	"Shirley",	"Bertha",	"Eva",	"Viola",	"Geraldine",	"Juanita",	"Pearl",	"Laura",	"Vivian",	"Anne",	"Ida",	"Kathryn",	"Myrtle",	"Norma",	"Lorraine",	"Bessie",	"Phyllis",	"Marian",	"Willie",	"Vera",	"Nellie",	"Violet",	"Wilma",	"Charlotte",	"Alma",	"Maxine",	"Stella",	"Mabel",	"Jessie",	"Sylvia",	"Genevieve",	"Minnie",	"Ella",	"Leona",	"Lillie",	"Kathleen",	"Ellen",	"Marguerite",	"Lucy",	"Nancy",	"Mattie",	"Jennie",	"Lena",	"Mae",	"Eileen",	"Opal",	"Blanche",	"Audrey",	"Patricia",	"Velma",	"Geneva",	"Elaine",	"Theresa",	"Beulah",	"Dolores",	"Sara",	"Harriet",	"Georgia",	"Jeanne",	"Eunice",	"Rosa",	"Wanda",	"Christine",	"Emily",	"Loretta",	"Carrie",	"Inez",	"Muriel",	"Janet",	"Hilda",	"Jeanette",	"Fannie",	"Alberta",	"Sophie",	"Maria",	"Anita",	"Hattie",	"Dora",	"Naomi",	"Verna",	"Ada",	"Cora",	"Madeline",	"Lula",	"Miriam",	"Rosemary",	"Mamie",	"Joan",	"Roberta",	"Arlene",	"Olga",	"Lola",	"Mable",	"Flora",	"Carolyn",	"Olive",	"Erma",	"Joyce",	"Bonnie",	"Daisy",	"Rachel",	"Nora",	"Estelle",	"Caroline",	"Winifred",	"Marcella",	"Rosie",	"Susie",	"Irma",	"Constance",	"Lucile",	"Lorene",	"Margie",	"Eula",	"Fern",	"Henrietta",	"Maggie",	"Victoria",	"Sadie",	"Rebecca",	"Adeline",	"Lottie",	"Eloise",	"Nina",	"Antoinette",	"Nettie",	"Carol",	"Della",	"Katie",	"Lydia",	"Regina",	"Dorothea",	"Laverne",	"Jeannette",	"Amelia",	"Cleo",	"Veronica",	"Angelina",	"Claire",	"Gloria",	"Bette",	"Essie",	"Goldie",	"Isabel",	"Rosalie",	"Freda",	"Donna",	"Sally",	"May",	"Ollie",	"Adele",	"Beverly",	"Faye",	"Angeline",	"Melba",	"Addie",	"Billie",	"Isabelle",	"Effie",	"Ora",	"Jewell",	"Cecelia",	"Lela",	"Peggy",	"Annette",	"Ernestine",	"Iva",	"Johnnie",	"Luella",	"Susan",	"Leola",	"Lila",	"Jewel",	"Imogene",	"Etta",	"Sallie",	"Bettie",	"Selma",	"Elva",	"Janie",	"Gwendolyn",	"Carmen",	"Cecilia",	"Ola",	"Eleanore",	"Delores",	"Celia",	"Teresa",	"Alta",	"Lizzie",	"Sue",	"Yvonne",	"Reba",	"Maude",	"Fay",	"Ina",	"Helene",	"Frieda",	"Janice",	"Angela",	"Nell",	"Elinor",	"Nannie",	"Francis",	"Priscilla",	"Matilda",	"Iris",	"Amy",	"Estella",	"Elnora",	"Elma",	"Lenora",	"Elvira",	"Nadine",	"Harriett",	"Eugenia",	"Arline",	"Annabelle",	"Ila",	"Mollie",	"Neva",	"Clarice",	"Natalie",	"Sophia",	"Flossie",	"Lee",	"Jacqueline",	"Margery",	"Gracie",	"Virgie",	"Leah",	"Olivia",	"Marilyn",	"Myra",	"Carmela",	"Edythe",	"Connie",	"Rena",	"Winnie",	"Mavis",	"Sybil",	"Cecile",	"Millie",	"Adelaide",	"Hannah",	"Bernadine",	"Carmella",	"Madge",	"Odessa",	"Aileen",	"Frankie",	"Cornelia",	"Zelma",	"Berniece",	"Aline",	"Lorena",	"Avis",	"Dorthy",	"Josie",	"Alyce",	"Letha",	"Willa",	"Rhoda",	"Rosetta",	"Concetta",	"Allie",	"Rosella",	"Leila",	"Merle",	"Lenore",	"Dollie",	"Eliza",	"Corinne",	"Claudia",	"Loraine",	"Lily",	"Jimmie",	"Christina",	"Helena",	"Amanda",	"Corine",	"Joy",	"Iona",	"Ramona",	"Lora",	"Judith",	"Ione",	"Tillie",	"Florine",	"Callie",	"Hester",	"Marcia",	"Ophelia",	"Beth",	"Hope",	"Katharine",	"Linda",	"Dolly",	"Paula",	"Leota",	"Althea",	"Lou",	"Earline",	"Wilda",	"Bernadette",	"Maudie",	"Gussie",	"Iola",	"Dixie",	"Lessie",	"Guadalupe",	"Reva",	"Yolanda",	"Mercedes",	"Kay",	"Stephanie",	"Tessie",	"Antonia",	"Beryl",	"Pearlie",	"Lilly",	"Eddie",	"Bertie",	"Nola",	"Augusta",	"Madelyn",	"Johanna",	"Charlene",	"Bobbie",	"Theda",	"Polly",	"Robbie",	"Cynthia",	"Suzanne",	"Georgie",	"Lupe",	"Dessie",	"Delia",	"Roxie",	"John",	"Melva",	"Lelia",	"Aurora",	"Darlene",	"Harriette",	"Oma",	"Allene",	"Verda",	"Philomena",	"Deloris",	"Glenna",	"Evangeline",	"Maurine",	"Alene",	"Consuelo",	"Mona",	"Enid",	"Elisabeth",	"Erna",	"Kate",	"Margarita",	"Mozelle",	"Alvina",	"Hallie",	"Isabella",	"Nona",	"Garnet",	"Isabell",	"James",	"Dortha",	"Jannie",	"Molly",	"Corrine",	"Zella",	"Vesta",	"Jaunita",	"Lorine",	"Rubye",	"Marjory",	"Clare",	"Belle",	"Lorna",	"Marietta",	"Pansy",	"Tommie",	"Valeria",	"Ruthie",	"Diana",	"Jo",	"Birdie",	"Queen",	"Ester",	"Leta",	"Madeleine",	"Syble",	"Nelda",	"Hortense",	"Dorris",	"Fanny",	"Winona",	"Elouise",	"Phoebe",	"Vida",	"Oleta",	"Roslyn",	"Louella",	"Monica",	"Leora",	"Wilhelmina",	"Cecil",	"Jayne",	"Elvera",	"Mayme",	"Rosalind",	"Elise",	"Joanne",	"Zelda",	"Agatha",	"Alfreda",	"Catharine",	"Robert",	"William",	"Gene",	"Marianne",	"Minerva",	"Ferne",	"Katheryn",	"Judy",	"Julie",	"Lucinda",	"Manuela",	"Freida",	"Leone",	"Elda",	"Rae",	"Charlie",	"Adell",	"Patsy",	"Dovie",	"Rowena",	"Vada",	"Emilie",	"Veda",	"Ilene",	"Louisa"];
@@ -326,11 +358,14 @@
     "I'm exhausted."
   ] // eventually replace with event generator and event trees
   
-  let scenarioIndex = [
+  // need to add flexibility for embedded scenario events,
+  // as well as exclusivity/decision/RNG branches
+  // need to add support for repeatable events
+  let scenarioIndex = [ // "Scenario types"
     0,
-    [ // "Scenario types"
+    [ // "Work related"
       0,
-      [ // "Work related"
+      [
         "Good at job.",
         "Boss said I good.",
         "Eligible for promotion.",
@@ -357,15 +392,75 @@
         "I got scolded for falling behind."
       ]
     ],
-    "Love.",
-    "Life."
-  ]
+    [ // Love related
+      0,
+      [
+        "I met someone new.",
+        "We went on our first date.",
+        "I think I'm in love.",
+        "Should I propose?",
+        "We're engaged!",
+        "It's time to start a family.",
+        "Baby on the way!",
+        "Our first child is born."
+      ]
+    ],
+    [ // Life related
+      0,
+      [
+        "I don't feel well.",
+        "Going to the doctor.",
+        "Everything checks out.",
+        "Not getting better.",
+        "Seeing the doctor again.",
+        "I have cancer.",
+        "Treatment makes me sick.",
+        "I'm nearly out of time.",
+        "I'll enjoy what's left.",
+        "Going out with a bang.",
+        "This is the end."
+      ]
+    ]
+  ];
+
+  let missionProgress = 10;
+  let showMissionText = true;
+  let missionIndex = [
+    [],
+    [
+      "Welcome to BitWorld!",
+      "You and your companions have traveled to this land seeking a place to stake your claim.",
+      "You sold everything you had to settle this land, now you must gather the materials needed to build your home.",
+      "First, let's select the location of your Manor.",
+      "Simply open up the Build menu and choose a location for the residence of your Manor.",
+      () => { return (buildings.size > 0) ? true : false; },
+      [
+        "Great! Your companions have already set their homes to your manor.",
+        "Your residence hasn't been completed, however. You must assist your companions in building it.",
+        "Select your army and click the ARMY icon to send them on their first expedition.",
+        () => { return (selectedArmy && armies.get(selectedArmy).task == 1) ? true : false; },
+        "As your units explore the region, they will gain experience while gathering necessary materials.",
+        "You can also manually assign them to gather resources from a tile by moving them there.",
+        "Move a unit just by clicking it and then clicking on a destination.",
+        "If the destination is a resource, the unit will start gathering from the tile.",
+        () => { return (selectedArmy && armies.get(selectedArmy).task == 2) ? true : false; },
+        [
+          "Now that you've understood the basics, gather 100 wood and complete your manor.",
+          () => { return (buildings.get(padXYZ(playerX, playerY, 0)).condition == 100) ? true : false; },
+          "Superb!",
+          "",
+          ""
+        ]
+      ]
+    ]
+  ];
 
   let tileIndex = false; // render tile layer index for testing
   let infoMenu = false;
   let buyLand = false;
   let paintLand = false;
   let mainMenu = true;
+  let testString = "string";
 
 	let mapWidth = 999;
 	let mapHeight = 999;
@@ -375,12 +470,14 @@
   let cursorY = 0;
   let cursorMapX = 0;
   let cursorMapY = 0;
+  let cursorMoved = 0;
   let playerX = 50;
   let playerY = 50;
   let playerIncome = 0;
   let playerIncomeS = 0;
  // let GDP = 100000; // denominated in copper pieces, G:Cx10000
   let playerBank = [1000,0,0,0,0]; // $C, Food, Wood, Stone, Ore
+  let selectedTile = 0;
   let selectedTileX = 0;
   let selectedTileY = 0;
   let selectedUnit = null;
@@ -477,7 +574,9 @@
     createArmy(x, y, [createUnit(new GPS(0, 0, 0), true)]); };
     
   menuLogic[4][0] = () => {
+    clearUI();
     playerBank[0] += 100;
+    showMissionText = true;
     refreshBuffer = true; }; // lovely button function
 
   menuLogic[5][0] = () => { menuPage++; }; // schematics menu
@@ -514,6 +613,8 @@
   menuLogic[9][1] = () => { assignUnit(); };
 
   let units = [];
+  // TEMP // push hidden unit to SSN 0 for logical simplicity
+  units.push(new Unit(units.length, new GPS(0, 0, 0), rndArray(), "Satoshi Nakamoto"));
   // !!! // IMPORTANT NOTE // TEMPORARY FIX // !!! //
   // army keys are handled by converting to and from STRING manually //
   // this was implemented to solve anonymous map access issues //
@@ -521,19 +622,15 @@
   // I.E. comparing objects by likeness, instead of memory value (cached) //
   // NOT IDEAL, IMO //
   let armies = new Map();
-
   {
-    //createArmy(51, 49, [createUnit(new Coord(51, 49), true)]);
-    //createArmy(51, 50, [createUnit(new Coord(51, 50), true)]);
-    //createArmy(51, 51, [createUnit(new Coord(51, 51), true)]);
+    createUnit(new GPS(0, 0, 0));
+    createUnit(new GPS(0, 0, 0));
+    createUnit(new GPS(0, 0, 0));
+    createUnit(new GPS(0, 0, 0));
+    createArmy(50, 50, [units[1], units[2], units[3], units[4]]);
   }
 
   let regions = new Map();
-  {
-    let newRegion = new Region();
-    let key = padXYZ(playerX, playerY, 0);
-    regions.set(key, newRegion);
-  }
   let buildings = new Map();
   let properties = new Map();
 	let ID = [];
@@ -613,16 +710,6 @@
   function sliceCoord(str) { // x, y, xx, yy
     return ([Number(str.slice(0,3)), Number(str.slice(5,8)), Number(str.slice(3,5)), Number(str.slice(8,10))]) }
 
-  // extract element from embedded array with digit index
-  function extractText(num, array = scenarioIndex, i = 0) {
-    let index = (''+num)[i];
-    let extraction = array[index];
-    if (i < (''+num).length - 1) { 
-      i++;
-      extraction = extractText(num, extraction, i); }
-    return extraction;
-  }
-
   function set(val, x, y, array) {
     array[x][y] = val; }
 
@@ -667,6 +754,10 @@
   function range2(num, min = 0, max = 999) {
     return ((num > max) ? max : ((num < min) ? min : num)); }
 
+  function min(num, min) { return (num < min) ? min : num; }
+
+  function max(num, max) { return (num > max) ? max : num; }
+
   // inRange() returns true if num is within min && max //
   // Solves issues of range() failing to return/set the correct value //
   function inRange(num, min = 0, max = 999) {
@@ -676,6 +767,9 @@
   function contains(x, y, width, height, checkX, checkY) {
       return ((x <= checkX && checkX <= x + width && y <= checkY && checkY <= y + height) ? true : false); }
 
+  // get the side length of a right isosceles triangle from hypotenuse
+  function getSides(hypotenuse) { return Math.round(hypotenuse / Math.sqrt(2)); }
+
   function checkAdjacent(val, x, y, array = map) { // returns seed percentage
     let seed = 0;
     for (let i = 1; i <= 4; i++) {
@@ -683,17 +777,55 @@
         seed += .25; }}
     return seed; }
 
+  function wrapText(text, width, index = 0, array = []) {
+    let i = 0;
+    if (text.length < width) {
+      array[index] = text;
+      return array; }
+    for (ii = 0; ii < width; ii++) {
+      if (text[ii] == " ") { i = ii + 1; }}
+    if (!i) { i = width; }
+    array[index] = text.slice(0, i);
+    return wrapText(text.slice(i, text.length), width, index + 1, array);
+  }
+
+  // extract element from embedded array with digit index
+  function extractText(num, array = scenarioIndex, i = 0) {
+    let index = (''+num)[i];
+    let extraction = array[index];
+    if (i < (''+num).length - 1) { 
+      i++;
+      extraction = extractText(num, extraction, i); }
+    return extraction;
+  }
+
+  function checkEvent(index, array) {
+    element = extractText(index + 1, array);
+    return (typeof element == "function") ? element() : false; }
+
+  function nextEvent(index, array) {
+    element = extractText(index+1, array);
+    if (typeof element == "string") { return index+1; }
+    if (typeof element == "function") { 
+      if (element() == false) { showMissionText = false; return index; }
+      else { return nextEvent(index+1, array); }}
+    if (Array.isArray(element)) {
+      return (index+1)*10; }
+  }
+
   function techAvailable(tech) {
     for (let i = 0; i < tech.requiredTechs.length; i++) {
       if (!techs[tech.requiredTechs[i][0]][tech.requiredTechs[i][1]].researched) {
         return false; }}
     return true; }
 
-  function createUnit(home, r = false) {
+  function createUnit(home = new GPS(0, 0, 0), r = false) {
     let unit = new Unit(units.length, home, rndArray());
     units.push(unit);
     menuText[7].push("Unit " + (units.length - 1));
-    menuLogic[7].push(() => { clearUI(); selectTile(unit.home.x, unit.home.y); });
+    menuLogic[7].push(() => { clearUI();
+      selectTile(unit.home.x, unit.home.y);
+      selectedUnit = unit.ssn; });
     if (r) return unit; }
 
   function genName(sex = rnd(2), sur = surNames[rnd(surNames.length)]) {
@@ -726,7 +858,7 @@
     if (r) { return army; }}
 
   function genScenario(array = scenarioIndex, index = "") {
-    let seed = rnd(array.length, 1);
+    let seed = rnd(array.length - 1, 1);
     index = index.concat((typeof array[0] == "string") ? 0 : seed);
     if (typeof array[index[index.length - 1]] != "string") {
       index = genScenario(array[seed], index); }
@@ -800,7 +932,7 @@
     generateMountains();
     expandMountains(); }
 
-  function layer(val, x, y, min, max, array = map) {
+  function layer(val, x, y, min, max, array = map, func = ((x, y) => {})) {
     for (let i = min; i <= max; i++) {
       x--;
       y--;
@@ -809,12 +941,14 @@
         for (let iii = 0; iii < i; iii++) {
           x += movementFull[0][ii];
           y += movementFull[1][ii];
-          array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val; }}}}
+          array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val;
+          func(x, y); }}}}
 
-  function layerSq(val, x, y, min, max, array = map, addDomain = false) {
+ function layerSq(val, x, y, min, max, array = map, addDomain = false) {
     for (let i = min; i <= max; i++) {
       let gps;
       let domainKey = padXYZ(playerX, playerY, 0);
+      array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val;
       x--;
       y--;
       array[range(x, 0, mapWidth)][range(y, 0, mapHeight)] = val;
@@ -906,18 +1040,13 @@
       if (map[x][y] == 1 && rnd(7) >= 5) {
         layer(4, x, y, 1, 1, tiles); }}}
 
-  function generateLand() {
-    let gps = new GPS(playerX, playerY, 0);
-    let key = padXYZ(playerX, playerY, 0);
-    tileOwned[playerX][playerY] = true;
-    tileMap.set(key, new Land());
-    regions.get(key).domain.push(gps);
-    layerSq(true, playerX, playerY, 1, 3, tileOwned, true);
-    
-    tileMap.set(padXYZ(50, 51, 0), new Land());
-    tileMap.set(padXYZ(51, 51, 0), new Land());
-    tileMap.set(padXYZ(51, 50, 0), new Land());
-    }
+  function generateRegion(key) {
+    let gps = sliceXYZ(key);
+    playerX = gps.x;
+    playerY = gps.y;
+    //tileMap.set(key, new Land());
+    // regions.get(key).domain.push(gps);
+    layerSq(true, playerX, playerY, 1, 3, tileOwned); }
 
   function expansion(val, def, gen, array = map) {
     for (let i = 0; i < def; i++) {
@@ -957,8 +1086,8 @@
     e = e || event; // IE Compatibility
     keyMap[e.keyCode] = e.type == 'keydown'; }
 
-  function moveTo(army, location) {
-    let distance = (army.moveX != 0 && army.moveY != 0) ? 2 : 3;
+  function moveTowards(army, location) {
+    let distance = (army.moveX * army.moveY == 0) ? 2 : 3;
     let moveX = distance * (army.moveX != 0) ? 
       (army.moveX / (Math.abs(army.moveX))) : -(army.tileX / (Math.abs(army.tileX)));
     let moveY = distance * (army.moveY != 0) ? 
@@ -987,16 +1116,28 @@
     }
   }
   
-  function patrol(key, x = 50, y = 50, range = 25) {
+  function patrol(key, x = playerX, y = playerY, range = 25, hop = 5) {
     let army = armies.get(key);
     let location = sliceXYZ(key);
-    let rndX = rnd(range * 2) - range;
-    let rndY = rnd(range * 2) - range;
-    army.moveX = x - location.x + rndX;
-    army.moveY = y - location.y + rndY;
+    let destination = new GPS(
+      range2(location.x + (rnd(hop * 2) - hop), x - range, x + range),
+      range2(location.y + (rnd(hop * 2) - hop), y - range, y + range), 0);
+    army.moveX = destination.x - location.x;
+    army.moveY = destination.y - location.y;
+    army.action = new Contract(destination.toString(), key, 0, [army.units.size, rnd(3, 1)]);
+  }
+
+  function gather(army) {
+    payContract2(army.action)
   }
 
   function logic() {
+    if (clickStart) {
+      cursorMoved = [ cursorX - clickStart[0][0], cursorY - clickStart[0][1]]; }
+    if (cursorMoved) {
+      cameraX = range2(cameraX + Math.round(cursorMoved[0] / 64), 0, mapWidth - fieldX - 1);
+      cameraY = range2(cameraY + Math.round(cursorMoved[1] / 64), 0, mapHeight - fieldY - 1); }
+
     if (nextPage) { menuPage++; nextPage = false; }
     if (keyMap[68] && inRange(cameraX + 1, 0, mapWidth - fieldX - 1)) { // d
       cameraX++; }
@@ -1009,6 +1150,10 @@
       
     if (keyMap[27]) { clearUI(); }
 
+    if (!showMissionText && checkEvent(missionProgress, missionIndex)) {
+      missionProgress = nextEvent(missionProgress, missionIndex);
+      showMissionText = true; }
+
     if (buildLand != 0)
     {
       let x = cameraX + cursorMapX;
@@ -1016,28 +1161,64 @@
       if (buildLand == 1 && clickEnd != 0) {
         tiles[x][y] = 0; }
       else {
-        if (clickEnd != 0 && playerBank[0] >= 250 && tileOwned[x][y]
+        if (clickEnd != 0 && playerBank[0] >= 250 /*&& tileOwned[x][y]*/
           && tiles[x][y] == 0) {
           tiles[x][y] = buildLand;
           if (buildLand >= 5) {
+            key = padXYZ(x, y, 0);
             tileLevel[x][y] = 1;
-            buildings.set(new GPS(x, y, 0).toString(), new Building(buildings.length));
+            building = new Building(buildings.length);
+            if (buildings.size == 0) { 
+              regions.set(key, new Region(1));
+              generateRegion(key);
+              for (i = 1; i <= 4; i++) {
+                units[i].home = sliceXYZ(key);
+                building.units.set(i, new Contract(i, key, Date.now() + 30000)); }}
+            buildings.set(key, building);
             playerBank[0] -= 250;
     }}}}
   }
 
   function logic1000() {
+    testString = genScenario();
     //let key = padXYZ(playerX, playerY, 0);
     //let region = regions.get(key);
     let key = [ ...armies.keys() ];
     let army = [ ...armies.values() ];
     for (i = 0; i < key.length; i++){
       let location = sliceXYZ(key[i]);
+      let arm = army[i];
+      let contract = army[i].action;
       if (army[i].moveX != 0 || army[i].moveY != 0
           || army[i].tileX != 0 || army[i].tileY != 0) {
-        moveTo(army[i], location); }
-      else if (army[i].action == 1) {
-        patrol(key[i]); }
+        moveTowards(army[i], location); }
+      else if (army[i].task == 1) {
+        if (!army[i].action) {
+          patrol(key[i]);
+        }
+        else if (army[i].action.period == 0) {
+          if (!army[i].action.expiration) {
+            army[i].action.expiration = Date.now() + 30000; }
+          if (Date.now() - army[i].action.expiration >= 0) { army[i].action = 0; }
+          else { army[i].action.period = Date.now() + 1000; }
+        }
+        else if (Date.now() - army[i].action.period >= 0) {
+          gather(army[i]);
+          army[i].action.period = 0;
+        }
+      }
+      else if (arm.task == 2) {
+        if (!contract.period) {
+          if (tiles[location.x][location.y] == 4) {
+            contract.payment.settlement = function() {
+              if (rnd(10) == 4) { playerBank[4] += arm.units.size; }}}
+          contract.period = Date.now() + 7000;
+        }
+        else if (Date.now() - contract.period >= 0) {
+          gather(arm);
+          contract.period = Date.now() + 1000;
+        }
+      }
     }
 
     key = [ ...buildings.keys() ];
@@ -1046,6 +1227,11 @@
     for (let i = 0; i < building.length; i++) {
       let gps = sliceXYZ(key[i]);
       let contract = [ ...building[i].units.values() ];
+
+      if (building[i].condition < 100 && playerBank[2] > 0) { 
+        playerBank[2]--;
+        building[i].condition++; } 
+
       if (contract.length > 0) { settleContracts(gps, building[i], contract); }
 
       if (tiles[gps.x][gps.y] == 5 && rnd(50) >= 5 && building[i].units.size < 4) {
@@ -1063,19 +1249,33 @@
                 playerGold += tileLevel[x][y] * 10; }}
       }
     }*/
-  }
-
-  function logic5000() {
-    //snd.play(); MetaNet is great and all.. but..
     let list = units;
     for (const unit of list) {
       let seed = rnd(100);
       if (seed == 50) {
         unit.events.push(eventIndex[rnd(10)]); }
-      else if (seed == 51) {
-        unit.events.push(genScenario())
+      else if (seed >= 80) {
+        let scenario = genScenario();
+        let progress = 0;
+        if (scenario > 9 && unit.scenarios.has(scenario)) {
+          progress = unit.scenarios.get(scenario) + 1;
+          array = extractText(Math.floor(scenario / 10));
+          if (progress < array.length) {
+            unit.events.push(scenario + progress);
+            unit.scenarios.set(scenario, progress);
+          }
+        }
+        else {
+          unit.events.push(scenario + progress);
+          unit.scenarios.set(scenario, progress);
+        }
       }
     }
+  }
+
+  function logic5000() {
+    // snd.play(); // MetaNet is great and all.. but..
+    
   }
 
   function settleContracts(gps, property, contracts) {
@@ -1099,6 +1299,11 @@
       playerBank[3] += 1 * property.production; }
     else if (index == 8) {
       playerBank[2] += 1 * property.production; }
+  }
+
+  function payContract2(contract) {
+    playerBank[contract.payment.resource] += contract.payment.amount;
+    contract.payment.settlement();
   }
 
 /*
@@ -1169,8 +1374,8 @@
       ? [(selectedTileX - cameraX) * 32, (selectedTileY - cameraY) * 32, 32, 32] 
       : [cursorMapX * 32, cursorMapY * 32, 32, 32];
     //drawRectangle(rect[0], rect[1], rect[2], rect[3], false, true, "black", "darkgray");
-    drawMenu(rect[0], rect[1], rect[2], rect[3], ()=>{
-      selectTile(cameraX + cursorMapX, cameraY + cursorMapY); }, 0, "white", "1")
+    drawMenu(rect[0], rect[1], rect[2], rect[3], ()=>{}, 0, "white", "1");
+    clickLock = false;
 
     // draw second layer (tiles)
     for (let y = 0; y < fieldY; y++) {
@@ -1213,6 +1418,22 @@
       canvas.strokeText(text, x, y); }
     canvas.fillStyle = color;
     canvas.fillText(text, x, y); }
+
+  // 32px Lucida Console has width of ~19
+  function drawWrappedText(text, x, y, font = "24px Arial", color = "black", 
+      stroke = false, strokeColor = "black", strokeWidth = 4, canvas = ctx,
+      size = Number(font.slice(0, 2)), iX = 0, iY = size) {
+    x += size + Math.floor(size * 1/16);
+    y += size + Math.floor(size * 7/8);
+    canvas.font = font;
+    for (i = 0; i < text.length; i++) {
+      if (stroke) {
+        canvas.strokeStyle = strokeColor;
+        canvas.lineWidth = strokeWidth;
+        canvas.strokeText(text[i], x + (i * iX), y + (i * iY)); }
+      canvas.fillStyle = color;
+      canvas.fillText(text[i], x + (i * iX), y + (i * iY)); }
+  }
 
   function drawRectangle(x, y, width, height, fill = true, stroke = true,
       fillColor = "black", strokeColor = "black", strokeWidth = "3", canvas = ctx) {
@@ -1339,7 +1560,7 @@
       clickLock = true;
       strokeColor = "rgba(255,255,255,1)";
       strokeWidth = "5";
-      { (clickEnd != 0) ? func() : hoverFunc(); }
+      { (clickEnd != 0 || selectedTile) ? func() : hoverFunc(); }
     }
     drawRectangle(x, y, width, height, true, true, color, strokeColor);
 
@@ -1347,8 +1568,8 @@
       for (let i = 1 + overflow; i < menuLength + overflow; i++) {
         if (menuID == 7) { hoverFunc = (() => { 
           drawMenu(cursorX + 25, cursorY + 25, 320, 96);
-          drawText(units[i - 1].name, cursorX + 25 + 32, cursorY + 32 + 32, "24px Arial", "lightgray", true);
-          drawText(units[i - 1].stats, cursorX + 25 + 32, cursorY + 32 + 64, "24px Arial", "lightgray", true);
+          drawText(units[i].name, cursorX + 25 + 32, cursorY + 32 + 32, "24px Arial", "lightgray", true);
+          drawText(units[i].stats, cursorX + 25 + 32, cursorY + 32 + 64, "24px Arial", "lightgray", true);
         }); }
         drawMenu(x + 16, y - 32 + (64 * (i - overflow)), 288, 32, menuLogic[menuID][i], 0, "rgba(0,0,0,0.25)", "3", hoverFunc);
         drawText(menuText[menuID][i], x + 32, y - 8 + (64 * (i - overflow)), "24px Arial", "lightgray", true); }}}
@@ -1357,7 +1578,7 @@
   function drawTileUnits(tile, height, width) {
     drawMenu((fieldX - 11) * 32, 32 + height + 32, width, 192);
     drawText("Production: " + (tile.production), (fieldX - 10) * 32, height + 96, "30px Arial", "White");
-    let func = (tile instanceof Army) ? () => { armies.get(selectedArmy).action = 1; } : () => {};
+    let func = (tile instanceof Army) ? () => { armies.get(selectedArmy).setTask(1); } : () => {};
     drawMenu((fieldX - 3) * 32, 32 + height + 32, 64, 64, func);
     drawArmy((fieldX - 3) * 32, 32 + height + 32, 2, "rgba(0,0,200,.5)");
 	  let ssns = [ ...tile.units.keys() ];
@@ -1385,7 +1606,6 @@
     let x;
     let y;
     let key = padXYZ(playerX, playerY, 0);
-    let region = regions.get(key);
 
     if (buildLand != 0) {
       ctx.drawImage(canvasImages[buildLand], cursorMapX * 32, cursorMapY * 32); }
@@ -1472,11 +1692,12 @@
     color = "rgba(0,0,0,0.7)";
     drawText(biomeNames[map[x][y]], (fieldX - 10) * 32, 100, font, color);
     drawText(tileNames[tiles[x][y]], (fieldX - 10) * 32, 150, font, color);
-    drawText("Owned: " + ((!tileMap.has(padXYZ(x, y, 0))) ? false : true), (fieldX - 10) * 32, 200, font, color);
+    drawText("Owned: " + tileOwned[x][y]/*((!tileMap.has(padXYZ(x, y, 0))) ? false : true)*/, (fieldX - 10) * 32, 200, font, color);
     // if tile has logic, draw expanded tooltip menu elements //
     if (![0,1,2,3,4].includes(tiles[x][y])) {
       drawText("Level: " + tileLevel[x][y], (fieldX - 10) * 32, 250, font, color);
-      drawText("Action: ", (fieldX - 10) * 32, 300, font, color);
+      drawText("Condition: " + buildings.get(padXYZ(x, y, 0)).condition,
+        (fieldX - 10) * 32, 300, font, color);
       drawText("Pay In: ", (fieldX - 10) * 32, 350, font, color);
       drawMenu((fieldX - 10) * 32, 416, 112, 32);
       drawMenu((fieldX - 5.5) * 32, 416, 112, 32); }
@@ -1529,7 +1750,8 @@
     selectedArmy = null;
     selectedBuilding = null;
     showUI = true;
-    showTech = false; }
+    showTech = false;
+    showMissionText = false; }
 
   // draw technology tree //
   function drawTech() {
@@ -1553,11 +1775,27 @@
 
   function drawMainMenu() {
     drawRectangle(0, 0, canvas.width, canvas.height);
-    let x = fieldX / 2 * 32 - 128;
-    let y = fieldY / 2 * 32 - 48;
-    drawMenu(x, y, 256, 96, () => { mainMenu = false; }, 0,
+    let x = fieldX / 2 * 32;
+    let y = fieldY / 2 * 32;
+    for (yi = 0; yi < 32; yi++) {
+      for (xi = 0; xi < 68; xi++) {
+        ctx.drawImage(microImages[map[cameraX + xi][cameraY + yi]],
+          x - 272 + (8 * xi), y - 256 + (8 * yi));
+      }
+    }
+    drawMenu(x - 272, y - 256, 544, 256, ()=>{}, 0,
+      "LightGray", "20", ()=>{}, "rgba(32,32,32,0.8)");
+    drawText("BitWorld", x - 256 + 25, y - 160 + 58, "bold 96px Courier New", "Gray", true, "LightGray");
+    drawMenu(x - 128, y + 32, 256, 96, () => { mainMenu = false; /*openFullscreen();*/ }, 0,
       "BlueViolet", "10", ()=>{}, "rgba(55,55,55,1)");
-    drawText("START", x+76, y+58, "32px Arial", "White", true, "Indigo")
+    drawText("START", x-128+76, y+32+58, "32px Arial", "White", true, "Indigo")
+  }
+
+  function drawTextBox(x = fieldX / 2 * 32 - 256, y = fieldY * 32 - 288, width = 512, height = 256,
+      text = extractText(missionProgress, missionIndex), size = 32) {
+    drawMenu(x, y, width, height, () => { missionProgress = nextEvent(missionProgress, missionIndex); });
+    drawWrappedText(wrapText(text, Math.ceil((width - (2 * size)) / (size * 19/32))),
+      x, y, size + "px Lucida Console", "White", true);
   }
 
   // draw canvas elements //
@@ -1576,10 +1814,15 @@
       drawMap();
       drawMod();
       drawObj();
+      if (showMissionText) { drawTextBox(); }
       if (showUI) { drawUI(); }
       if (showTech) { drawTech(); }
     }
     
+    if (selectedTile) { 
+      if (!clickLock) { clickActions(); }
+      else { getCursorXY(null, selectedTile[0], selectedTile[1]); }
+      selectedTile = 0; }
     clickEnd = 0;
   }
 
@@ -1588,26 +1831,44 @@
   }
 
 	generateMap();
-  generateLand();
 
-  document.addEventListener("mousedown", mouseDownHandler, false);
-  document.addEventListener("mouseup", mouseUpHandler, false);
+  if (isMobile) {
+    let el = document.getElementsByTagName("canvas")[0];
+    el.addEventListener("touchstart", touchStart);
+    el.addEventListener("touchmove", touchMoved);
+    el.addEventListener("touchend", touchEnd);
+    //el.addEventListener("touchcancel", handleCancel);
+  }
+  else {
+    window.onload = init;
+    function init() {
+      if (window.Event) {
+        document.captureEvents(Event.MOUSEMOVE); }
+      document.onmousemove = getCursorXY; }
+    document.addEventListener("mousedown", mouseDownHandler, false);
+    document.addEventListener("mouseup", mouseUpHandler, false);
+  }
   
+  function touchStart(e) {
+    selectedTile = [cursorX, cursorY];
+    getCursorXY(e, e.touches[0].clientX, e.touches[0].clientY);
+    mouseDownHandler(e);
+    e.preventDefault();
+  }
 
-  window.onload = init;
-  function init() {
-    if (window.Event) {
-    document.captureEvents(Event.MOUSEMOVE); }
-    document.onmousemove = getCursorXY; }
+  function touchEnd(e) {
+    mouseUpHandler(e);
+    e.preventDefault();
+  }
+
+  function touchMoved(e) {
+    getCursorXY(e, e.touches[0].clientX, e.touches[0].clientY);
+  }
 
   function mouseDownHandler(e) {
-    clickStart = Date.now();
+    clickStart = [[cursorX, cursorY], Date.now()];
 
-    if (selectedArmy && !clickLock) {
-      let army = armies.get(selectedArmy);
-      let location = sliceXYZ(selectedArmy);
-      army.moveX = (cameraX + cursorMapX) - location.x;
-      army.moveY = (cameraY + cursorMapY) - location.y; }
+    if (!clickLock && !selectedTile) { clickActions(); }
 
     if (buyLand) {
       let x = playerX;
@@ -1645,35 +1906,60 @@
         if (xi == x && yi == y) { return; }
       } while (true); }}
 
-  function mouseUpHandler(e) {
-    if (clickStart != 0) {
-      clickEnd = Date.now() - clickStart;
-      clickStart = 0; }
+  function clickActions(e) {
+    selectTile(cameraX + cursorMapX, cameraY + cursorMapY);
 
-    if (cameraX + cursorMapX == selectedTileX && cameraY + cursorMapY == selectedTileY) {
-      selectedTileX = 0;
-      selectedTileY = 0;
-      selectedBuilding = null; }
-    else if (!clickLock) {
-      selectTile(cameraX + cursorMapX, cameraY + cursorMapY); }}
+    if (selectedArmy) {
+      let army = armies.get(selectedArmy);
+      let location = sliceXYZ(selectedArmy);
+      let destination = new GPS(cameraX + cursorMapX, cameraY + cursorMapY, 0);
+      army.moveX = (destination.x) - location.x;
+      army.moveY = (destination.y) - location.y;
+      army.task = 0;
+      army.action = 0;
+      if (!army.task && (tiles[destination.x][destination.y] == 3
+        || tiles[destination.x][destination.y] == 4)) {
+          army.setTask(2, new Contract(destination.toString(), selectedArmy,
+            0, [army.units.size, tiles[destination.x][destination.y] - 1])); }}
+  }
+
+  function mouseUpHandler(e) {
+    if (clickStart) {
+      clickEnd = Date.now() - clickStart[1];
+      clickStart = 0;
+      cursorMoved = 0; } 
+  }
 
   function selectTile(x, y) {
-    selectedTileX = x;
-    selectedTileY = y;
-    let key = padXYZ(x, y, 0);
-    if (buildings.has(key)) { selectedBuilding = key; }
-    if (armies.has(key)) { selectedArmy = key; }}
+    if (x == selectedTileX && y == selectedTileY) {
+      selectedTileX = 0; selectedTileY = 0;
+      selectedBuilding = null; selectedArmy = null; }
+    else {
+      selectedTileX = x;
+      selectedTileY = y;
+      let key = padXYZ(x, y, 0);
+      if (buildings.has(key)) { selectedBuilding = key; }
+      if (armies.has(key)) { selectedArmy = key; } }}
 
-  function getCursorXY(e) {
+  function getCursorXY(e, x = e.clientX, y = e.clientY) {
     let rect = canvas.getBoundingClientRect();
-    cursorX = (event.clientX - rect.left) / (rect.right - rect.left) * canvas.width;
-    cursorY = (event.clientY - rect.top) / (rect.bottom - rect.top) * canvas.height;
+    cursorX = (x - rect.left) / (rect.right - rect.left) * canvas.width;
+    cursorY = (y - rect.top) / (rect.bottom - rect.top) * canvas.height;
     cursorMapX = Math.floor(cursorX / 32);
     cursorMapY = Math.floor(cursorY / 32); }
 
+
+  function openFullscreen() {
+    if (canvas.requestFullscreen) { canvas.requestFullscreen(); }
+    else if (canvas.mozRequestFullScreen) { /* Firefox */
+      canvas.mozRequestFullScreen(); }
+    else if (canvas.webkitRequestFullscreen) { /* Chrome, Safari and Opera */
+      canvas.webkitRequestFullscreen(); }
+    else if (canvas.msRequestFullscreen) { /* IE/Edge */
+      canvas.msRequestFullscreen(); }}
+
   const times = [];
   let fps;
-
   function refreshLoop() {
     window.requestAnimationFrame(() => {
       const now = performance.now();
@@ -1724,6 +2010,9 @@
   tileDrawFuncs[6](0, 0);
   tileDrawFuncs[7](0, 0);
   tileDrawFuncs[8](0, 0);
+  drawRectangle(0, 0, 8, 8, true, false, biomeDraws[0], "black", "1", microImages[0].getContext('2d'));
+  drawRectangle(0, 0, 8, 8, true, false, biomeDraws[1], "black", "1", microImages[1].getContext('2d'));
+  drawRectangle(0, 0, 8, 8, true, false, biomeDraws[2], "black", "1", microImages[2].getContext('2d'));
 
   function main() {
     //if (refreshCanvas) { setTimeout(bufferDraw, 50); }
